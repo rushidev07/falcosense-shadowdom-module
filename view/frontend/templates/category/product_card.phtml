@@ -1,0 +1,34 @@
+<template id="ahy-card-tpl">
+    <li class="item product product-item">
+        <div class="product-item-info">
+            <div class="ahy-img-container">
+                <a class="product photo product-item-photo" href="{{url}}">
+                    <span class="ahy-img-wrap">
+                        <img src="{{img}}" alt="{{name}}" loading="lazy">
+                    </span>
+                </a>
+                <div class="ahy-img-actions" data-role="add-to-links">
+                    <a href="#" class="action towishlist ahy-post-action"
+                       data-action-url="{{wishlistUrl}}" data-action-product="{{productId}}"
+                       title="Add to Wish List" aria-label="Add to Wish List" role="button">
+                        <span>Add to Wish List</span>
+                    </a>
+                    <a href="#" class="action tocompare ahy-post-action"
+                       data-action-url="{{compareUrl}}" data-action-product="{{productId}}"
+                       title="Add to Compare" aria-label="Add to Compare" role="button">
+                        <span>Add to Compare</span>
+                    </a>
+                </div>
+            </div>
+            <div class="product-item-details">
+                <strong class="product-item-name">
+                    <a class="product-item-link" href="{{url}}">{{name}}</a>
+                </strong>
+                <div class="price-box price-final_price">{{price}}</div>
+                <div class="product-item-actions">
+                    <div class="actions-primary">{{addToCart}}</div>
+                </div>
+            </div>
+        </div>
+    </li>
+</template>

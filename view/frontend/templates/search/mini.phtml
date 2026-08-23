@@ -1,0 +1,203 @@
+<?php
+/** @var \Ahy\SmartSearchLuma\Block\Search $block */
+if (!$block->isEnabled()) return;
+
+/** @var \Magento\Framework\Escaper $escaper */
+$searchResultUrl = $escaper->escapeUrl($block->getSearchResultUrl());
+$jsUrl           = $block->getViewFileUrl('Ahy_SmartSearchLuma::js/search-panel.js');
+?>
+<style>
+    body.ahy-search-open .page-header { position: relative; z-index: 601; }
+    body.ahy-search-open .nav-toggle  { z-index: 599 !important; }
+
+    #ahy-search-icon-btn {
+        float: right; background: none; border: none; cursor: pointer;
+        padding: 8px; margin-left: 6px;
+        display: inline-flex; align-items: center; line-height: 1;
+        color: inherit; opacity: .8; transition: opacity .15s;
+    }
+    #ahy-search-icon-btn:hover { opacity: 1; }
+    #ahy-search-icon-btn svg {
+        width: 18px; height: 18px; fill: none; stroke: currentColor;
+        stroke-width: 2.2; stroke-linecap: round;
+    }
+
+    #ahy-search-overlay {
+        display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+        z-index: 580; background: rgba(0,0,0,.35);
+        backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+        opacity: 0; transition: opacity .28s ease;
+    }
+    #ahy-search-overlay.open    { display: block; }
+    #ahy-search-overlay.visible { opacity: 1; }
+    #ahy-search-panel {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 600;
+        background: var(--ahy-header-bg, #fff);
+        transform: translateY(-100%);
+        visibility: hidden;
+        pointer-events: none;
+        transition: transform .35s cubic-bezier(.4,0,.2,1), visibility 0s linear .35s;
+        max-height: 100vh; overflow-y: auto;
+        padding-top: 140px; padding-bottom: 32px;
+    }
+    #ahy-search-panel.open {
+        transform: translateY(0);
+        visibility: visible;
+        pointer-events: auto;
+        transition: transform .35s cubic-bezier(.4,0,.2,1), visibility 0s linear 0s;
+    }
+
+    @media (max-width: 1024px) { #ahy-search-panel { padding-top: 110px; } }
+    @media (max-width: 767px)  { #ahy-search-panel { padding-top: 100px; }  .ahy-panel-inner{margin-bottom: 100px !important;}}
+
+    .ahy-panel-inner { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+    .ahy-overlay-search-row {
+        display: flex; align-items: center; gap: 14px;
+        padding-bottom: 10px; margin-bottom: 28px;
+    }
+    .ahy-overlay-search-row svg {
+        width: 22px; height: 22px; flex-shrink: 0;
+        fill: none; stroke: #6e6e73; stroke-width: 2.2; stroke-linecap: round;
+    }
+    #ahy-overlay-input {
+        flex: 1; border: none !important; outline: none !important;
+        box-shadow: none !important; background: transparent;
+        font-size: 24px; font-weight: 400; color: #1d1d1f;
+        min-width: 0; letter-spacing: -.2px;
+    }
+    #ahy-overlay-input::placeholder { color: #c7c7cc; }
+    #ahy-overlay-clear {
+        background: none; border: none; cursor: pointer;
+        color: #6e6e73; font-size: 18px; padding: 2px 4px;
+        display: none; line-height: 1; transition: color .15s;
+    }
+    #ahy-overlay-clear:hover { color: #1d1d1f; }
+    #ahy-overlay-clear.visible { display: block; }
+
+    .ahy-quick-title,
+    .ahy-overlay-results-title {
+        font-size: 10px; font-weight: 700; letter-spacing: .08em;
+        text-transform: uppercase; color: #aeaeb2; margin: 0 0 14px;
+    }
+
+    .ahy-popular-layout { display: flex; gap: 0; align-items: flex-start; }
+    .ahy-popular-left { flex: 0 0 260px; padding-right: 40px; border-right: 1px solid #e5e5ea; }
+    .ahy-popular-right { flex: 1; padding-left: 40px; }
+
+    .ahy-quick-links { list-style: none; margin: 0; padding: 0; }
+    .ahy-quick-links li { margin-bottom: 0; }
+    .ahy-quick-links a {
+        display: flex; align-items: center; gap: 10px;
+        font-size: 14px; color: #1d1d1f; text-decoration: none;
+        padding: 9px 10px; border-radius: 8px;
+        transition: background .12s, color .12s;
+    }
+    .ahy-quick-links a:hover { background: #f5f5f7; color: #0071e3; }
+    .ahy-quick-links a .ahy-ql-icon {
+        width: 28px; height: 28px; background: #f5f5f7; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0; font-size: 12px; color: #6e6e73; transition: background .12s;
+    }
+    .ahy-quick-links a:hover .ahy-ql-icon { background: #e5e5ea; }
+
+    .ahy-overlay-grid {
+        display: grid; grid-template-columns: repeat(6, 1fr);
+        gap: 10px; margin-bottom: 16px;
+    }
+    .ahy-overlay-product {
+        display: flex; flex-direction: column; gap: 0;
+        text-decoration: none; color: inherit;
+        border-radius: 8px; overflow: hidden; background: transparent;
+        transition: box-shadow .18s ease;
+    }
+    .ahy-overlay-product:hover { box-shadow: 0 6px 20px rgba(0,0,0,.10); border-radius: 8px; text-decoration: none !important; }
+    .ahy-overlay-product *:hover { text-decoration: none !important; }
+    .ahy-overlay-product-img-wrap {
+        overflow: hidden; border-radius: 8px; background: #f5f5f7;
+        aspect-ratio: 1;
+    }
+    .ahy-overlay-product img {
+        width: 100%; height: 100%; object-fit: cover; display: block;
+        transition: transform .22s ease;
+        background-color: white;
+    }
+    .ahy-overlay-product:hover img { transform: scale(1.04); }
+    .ahy-overlay-product-info { padding: 6px 2px 4px; }
+    .ahy-overlay-product-name {
+        font-size: 11px; font-weight: 500; color: #1d1d1f;
+        line-height: 1.3; margin-bottom: 1px;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .ahy-overlay-product-price { font-size: 11px; color: #6e6e73; }
+
+    .ahy-suggest-list { list-style: none; margin: 0; padding: 0; }
+    .ahy-suggest-row {
+        display: flex; align-items: center; gap: 12px;
+        padding: 10px 8px; border-radius: 8px;
+        text-decoration: none; color: #1d1d1f;
+        transition: background .1s;
+    }
+    .ahy-suggest-row:hover { background: #f5f5f7; text-decoration: none !important; }
+    .ahy-suggest-icon {
+        width: 16px; height: 16px; flex-shrink: 0;
+        fill: none; stroke: #aeaeb2; stroke-width: 2.2; stroke-linecap: round;
+    }
+    .ahy-suggest-text { flex: 1; font-size: 15px; }
+    .ahy-suggest-text strong { font-weight: 700; color: #1d1d1f; }
+    .ahy-suggest-arrow {
+        width: 14px; height: 14px; flex-shrink: 0;
+        fill: none; stroke: #c7c7cc; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+    }
+    .ahy-suggest-row:hover .ahy-suggest-arrow { stroke: #6e6e73; }
+
+    .ahy-overlay-see-all {
+        display: inline-flex; align-items: center; gap: 4px;
+        font-size: 13px; color: #0071e3; text-decoration: none; font-weight: 500;
+    }
+    .ahy-overlay-see-all:hover { text-decoration: none; }
+    .ahy-overlay-status { font-size: 14px; color: #6e6e73; }
+
+    @media (max-width: 900px) {
+        .ahy-popular-layout { flex-direction: column; gap: 28px; }
+        .ahy-popular-left { flex: none; width: 100%; padding-right: 0; border-right: none; border-bottom: 1px solid #e5e5ea; padding-bottom: 24px; }
+        .ahy-popular-right { padding-left: 0; }
+    }
+    @media (max-width: 767px) {
+        .ahy-panel-inner { padding: 0 16px; }
+        #ahy-overlay-input { font-size: 18px; }
+        .ahy-overlay-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    }
+</style>
+
+<button id="ahy-search-icon-btn" type="button" aria-label="Search" aria-expanded="false">
+    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="22" y2="22"/></svg>
+</button>
+
+<div id="ahy-search-overlay"></div>
+
+<div id="ahy-search-panel" role="dialog" aria-modal="true" aria-label="Search">
+    <div class="ahy-panel-inner">
+        <form action="<?= $searchResultUrl ?>" method="get" autocomplete="off">
+            <div class="ahy-overlay-search-row">
+                <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="22" y2="22"/></svg>
+                <input type="text" name="q" id="ahy-overlay-input"
+                       placeholder="Search entire store here..." maxlength="128" aria-label="Search">
+                <button type="button" id="ahy-overlay-clear" aria-label="Clear">&#x2715;</button>
+            </div>
+        </form>
+        <div id="ahy-panel-body"></div>
+    </div>
+</div>
+
+<script>
+window.AhySearch = {
+    api:     '<?= $escaper->escapeJs($block->getProductsApiUrl()) ?>',
+    token:   '<?= $escaper->escapeJs($block->getSearchToken()) ?>',
+    store:   <?= (int) $block->getPlatformStoreId() ?>,
+    media:   '<?= $escaper->escapeJs($block->getMediaBaseUrl()) ?>',
+    res:     '<?= $escaper->escapeJs($block->getSearchResultUrl()) ?>',
+    suggest: '<?= $escaper->escapeJs($block->getSuggestUrl()) ?>'
+};
+</script>
+<script src="<?= $escaper->escapeUrl($jsUrl) ?>"></script>

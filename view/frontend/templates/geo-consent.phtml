@@ -1,0 +1,148 @@
+<?php
+declare(strict_types=1);
+/** @var \Ahy\SmartSearchLuma\Block\GeoConsent $block */
+/** @var \Magento\Framework\Escaper $escaper */
+?>
+<script>
+(function () {
+    'use strict';
+
+    var GEO_COOKIE   = 'ahy_geo_state';
+    var GEO_TTL_DAYS = 30;
+    var SESSION_KEY  = 'ahy_geo_tried_v2';
+
+    // ── helpers ──────────────────────────────────────────────────────────────
+
+    function readCookie(name) {
+        var m = document.cookie.match('(?:^|; )' + name + '=([^;]*)');
+        return m ? decodeURIComponent(m[1]) : null;
+    }
+
+    function writeCookie(name, value) {
+        var expires = new Date();
+        expires.setDate(expires.getDate() + GEO_TTL_DAYS);
+        document.cookie = name + '=' + encodeURIComponent(value)
+            + '; path=/; expires=' + expires.toUTCString()
+            + '; SameSite=Lax';
+    }
+
+    function deleteCookie(name) {
+        document.cookie = name + '=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+    }
+
+    function markTried() {
+        try { sessionStorage.setItem(SESSION_KEY, '1'); } catch (e) {}
+    }
+
+    function alreadyTried() {
+        try { return !!sessionStorage.getItem(SESSION_KEY); } catch (e) { return false; }
+    }
+
+    // Detects browser IP directly — browser is the caller so its real IP is used automatically.
+    // ipapi.co is free, HTTPS, no API key needed, 1 000 req/day per IP.
+    function fetchAndStore() {
+        var current = readCookie(GEO_COOKIE);
+
+        if (current !== null && current !== '') return; // already have a real value
+
+        if (current === '') deleteCookie(GEO_COOKIE);  // stale empty — clear and retry
+
+        if (alreadyTried()) return; // already failed this browser session
+
+        fetch('https://ipapi.co/json/', { cache: 'no-store' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (d) {
+                var region = d && (d.region || d.region_name || '');
+                if (region) {
+                    writeCookie(GEO_COOKIE, region);
+                } else {
+                    markTried();
+                }
+            })
+            .catch(function () { markTried(); });
+    }
+
+    // ── consent detection ────────────────────────────────────────────────────
+    // Priority:
+    //   1. Magento Cookie Restriction Mode  (user_allowed_save_cookie cookie)
+    //   2. OneTrust                         (OnetrustActiveGroups / OptanonConsent)
+    //   3. CookieBot                        (Cookiebot.consent / CookieConsent cookie)
+    //   4. CookieYes                        (cookieyes-consent cookie)
+    //   5. No CMP detected                  → treat as consented
+
+    function isConsentGranted() {
+        var v;
+
+        // 1. Magento
+        v = readCookie('user_allowed_save_cookie');
+        if (v !== null) {
+            try { return Object.values(JSON.parse(v)).indexOf(1) !== -1; }
+            catch (e) { return v === '1'; }
+        }
+
+        // 2. OneTrust
+        if (typeof window.OnetrustActiveGroups === 'string') {
+            return window.OnetrustActiveGroups.indexOf('C0003') !== -1
+                || window.OnetrustActiveGroups.indexOf('C0004') !== -1;
+        }
+        v = readCookie('OptanonConsent');
+        if (v !== null) return /C0003%3A1/.test(v) || /C0004%3A1/.test(v);
+
+        // 3. CookieBot
+        if (window.Cookiebot && window.Cookiebot.consent) {
+            return !!(window.Cookiebot.consent.preferences || window.Cookiebot.consent.statistics);
+        }
+        v = readCookie('CookieConsent');
+        if (v !== null) {
+            v = decodeURIComponent(v);
+            return /preferences:true/.test(v) || /statistics:true/.test(v);
+        }
+
+        // 4. CookieYes
+        v = readCookie('cookieyes-consent');
+        if (v !== null) {
+            v = decodeURIComponent(v);
+            return /functional:yes/.test(v) || /analytics:yes/.test(v);
+        }
+
+        // 5. No CMP — site has no restriction
+        return true;
+    }
+
+    // ── deferred consent listeners ───────────────────────────────────────────
+
+    function onConsented() {
+        var v = readCookie(GEO_COOKIE);
+        if (v === null || v === '') fetchAndStore();
+    }
+
+    window.addEventListener('consent.onetrust',        onConsented);
+    window.addEventListener('CookybotOnAccept',        onConsented);
+    window.addEventListener('cookieyes_consent_update', onConsented);
+
+    // Magento native banner: poll up to 5 s for user_allowed_save_cookie to appear
+    var _poll = 0;
+    function pollMageConsent() {
+        var v = readCookie(GEO_COOKIE);
+        if (v !== null && v !== '') return;
+        if (readCookie('user_allowed_save_cookie') !== null) { onConsented(); return; }
+        if (++_poll < 5) setTimeout(pollMageConsent, 1000);
+    }
+
+    // ── entry point ──────────────────────────────────────────────────────────
+
+    function init() {
+        if (isConsentGranted()) {
+            fetchAndStore();
+        } else {
+            setTimeout(pollMageConsent, 1000);
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+}());
+</script>

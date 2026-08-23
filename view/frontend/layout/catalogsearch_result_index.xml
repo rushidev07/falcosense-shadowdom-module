@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceContainer name="content">
+            <block class="Ahy\SmartSearchLuma\Block\Category"
+                   name="ahy_smartsearchluma_search"
+                   template="Ahy_SmartSearchLuma::category/results.phtml"
+                   ifconfig="smart_search/general/frontend_enabled"
+                   before="-">
+                <block class="Magento\Framework\View\Element\Template"
+                       name="ahy_search_card_template"
+                       as="ahy_card_template"
+                       template="Ahy_SmartSearchLuma::category/product_card.phtml"/>
+                <block class="Magento\Framework\View\Element\Template"
+                       name="ahy_search_options_template"
+                       as="ahy_options_template"
+                       template="Ahy_SmartSearchLuma::category/product_options.phtml"/>
+            </block>
+        </referenceContainer>
+    </body>
+</page>

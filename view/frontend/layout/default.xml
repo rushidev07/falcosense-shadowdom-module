@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceBlock name="before.body.end">
+            <block class="Ahy\SmartSearchLuma\Block\GeoConsent"
+                   name="ahy_geo_consent"
+                   template="Ahy_SmartSearchLuma::geo-consent.phtml"
+                   ifconfig="smart_search/general/frontend_enabled"/>
+            <!--
+                Shadow DOM widget mount point (see the implementation plan). Purely
+                additive: one custom element, one config payload, one script tag.
+                Gated on frontend_enabled only — Block\Widget\Bootstrap itself checks
+                widget_enabled and emits an inert {"active": false} payload when the
+                legacy path is what's actually running, so boot.js does nothing at
+                all in that case rather than this block needing a second ifconfig.
+            -->
+            <block class="Ahy\SmartSearchLuma\Block\Widget\Bootstrap"
+                   name="ahy_widget_bootstrap"
+                   template="Ahy_SmartSearchLuma::widget/bootstrap.phtml"
+                   ifconfig="smart_search/general/frontend_enabled"/>
+        </referenceBlock>
+        <referenceContainer name="header-wrapper">
+            <block class="Ahy\SmartSearchLuma\Block\Search"
+                   name="ahy_search_bar"
+                   template="Ahy_SmartSearchLuma::search/mini.phtml"
+                   ifconfig="smart_search/general/frontend_enabled"
+                   after="minicart"/>
+        </referenceContainer>
+    </body>
+</page>

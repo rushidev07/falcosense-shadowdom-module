@@ -1,0 +1,1366 @@
+<?php
+/** @var \Ahy\SmartSearchLuma\Block\Category $block */
+if (!$block->isEnabled()) return;
+
+/** @var \Magento\Framework\Escaper $escaper */
+$productsApiUrl  = $escaper->escapeUrl($block->getProductsApiUrl());
+$searchToken     = $escaper->escapeJs($block->getSearchToken());
+$categoryName    = $escaper->escapeJs($block->getCategoryName());
+$searchQuery     = $escaper->escapeJs($block->getSearchQuery());
+$platformStoreId = (int) $block->getPlatformStoreId();
+$productsPerPage = (int) $block->getProductsPerPage();
+$mediaBaseUrl    = $escaper->escapeUrl($block->getMediaBaseUrl());
+$addToCartUrl    = $escaper->escapeUrl($block->getAddToCartUrl());
+$wishlistUrl       = $escaper->escapeUrl($block->getUrl('wishlist/index/add'));
+$compareUrl        = $escaper->escapeUrl($block->getUrl('catalog/product_compare/add'));
+$variantImagesUrl  = $escaper->escapeUrl($block->getVariantImagesUrl());
+$analyticsUrl      = $escaper->escapeUrl($block->getSearchAnalyticsUrl());
+$eventsUrl         = $escaper->escapeUrl($block->getEventsUrl());
+$nrEnabled         = $block->isNoResultsModalEnabled();
+$nrCfg             = $nrEnabled ? $block->getNoResultsModalConfig() : [];
+?>
+
+<div id="ahy-category-wrap">
+
+    <style>
+        /* PLP page background */
+        .catalog-category-view, .catalogsearch-result-index { background: #f5f5f7; }
+        /* Force main column full width since we removed the left sidebar */
+        .catalog-category-view.page-layout-2columns-left .column.main,
+        .catalogsearch-result-index.page-layout-2columns-left .column.main { width: 100% !important; }
+        #ahy-category-wrap { width: 100%; }
+        .ahy-cat-layout { display: flex; gap: 24px; align-items: flex-start; }
+        .ahy-cat-sidebar { width: 240px; flex-shrink: 0; }
+        .ahy-cat-main { flex: 1; min-width: 0; }
+        @media (max-width: 767px) {
+            .ahy-cat-layout { flex-direction: column; }
+            .ahy-cat-sidebar { width: 100%; }
+        }
+
+        /* 3-column product grid */
+        #ahy-product-grid .product-items {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2px;
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+        #ahy-product-grid .product-item { width: 100%; display: flex; justify-content: center; align-items: center;  margin: 0; padding: 0; }
+        #ahy-product-grid .product-item-info {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            border-radius: 3px;
+            overflow: hidden;
+            background-color: white;
+        }
+        #ahy-product-grid .product-item-details { padding: 12px; display: flex; flex-direction: column; flex: 1; }
+        @media (max-width: 1024px) { #ahy-product-grid .product-items { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 480px)  { #ahy-product-grid .product-items { grid-template-columns: repeat(1, 1fr); } }
+
+        /* Product image */
+        #ahy-product-grid .ahy-img-container { position: relative; }
+        #ahy-product-grid .ahy-img-wrap { display: block; aspect-ratio: 4/5; overflow: hidden; background: #f5f5f5; max-height: 400px; }
+        #ahy-product-grid .ahy-img-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.3s ease; }
+        #ahy-product-grid .product-item:hover .ahy-img-wrap img { transform: scale(1.04); }
+
+        /* Wishlist + Compare overlay on image */
+        #ahy-product-grid .ahy-img-actions {
+            position: absolute; top: 8px; left: 8px; right: 8px;
+            display: flex; justify-content: space-between;
+            opacity: 0; pointer-events: none;
+            transition: opacity .2s ease;
+        }
+        #ahy-product-grid .product-item:hover .ahy-img-actions { opacity: 1; pointer-events: auto; }
+        #ahy-product-grid .ahy-img-actions .action {
+            display: flex; align-items: center; justify-content: center;
+            width: 34px; height: 34px;
+            background: rgba(255,255,255,0.92);
+            border-radius: 50%;
+            box-shadow: 0 1px 4px rgba(0,0,0,.18);
+            color: #555; font-size: 16px;
+            text-decoration: none;
+            transition: background .15s, transform .15s, color .15s;
+        }
+        #ahy-product-grid .ahy-img-actions .action:hover { background: #fff; color: #1979c3; transform: scale(1.12); }
+        #ahy-product-grid .ahy-img-actions .action span { display: none; }
+        @media (max-width: 767px) {
+            #ahy-product-grid .ahy-img-actions { opacity: 1; pointer-events: auto; }
+        }
+
+        /* Title: bold, below image, 2-line clamp */
+        #ahy-product-grid .product-item-name { display: block; margin: 0 0 8px; }
+        #ahy-product-grid .product-item-link {
+            font-weight: 700;
+            font-size: 14px;
+            color: #333;
+            text-decoration: none;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            min-height: 2.6em;
+            line-height: 1.3;
+        }
+        #ahy-product-grid .product-item-link:hover { color: #1979c3; }
+
+        /* Options toggle button */
+        .ahy-opts-btn {
+            width: 100%; padding: 9px; border: 1px solid #1979c3; background: #fff;
+            color: #1979c3; font-size: 13px; font-weight: 600; border-radius: 3px;
+            cursor: pointer; transition: background .2s, color .2s; letter-spacing: .02em;
+        }
+        .ahy-opts-btn:hover { background: #1979c3; color: #fff; }
+        .ahy-config-wrap.open .ahy-opts-btn { display: none; }
+
+        /* Standalone Add to Cart — identical to Options button */
+        #ahy-product-grid .actions-primary { width: 100%; display: block; }
+        #ahy-product-grid .actions-primary .ahy-add-to-cart {
+            display: block; width: 100%; padding: 9px;
+            border: 1px solid #1979c3 !important; background: #fff !important;
+            color: #1979c3 !important; font-size: 13px; font-weight: 600; border-radius: 3px;
+            cursor: pointer; transition: background .2s, color .2s; letter-spacing: .02em;
+            box-shadow: none !important; line-height: inherit;
+        }
+        #ahy-product-grid .actions-primary .ahy-add-to-cart:hover:not(:disabled) { background: #1979c3 !important; color: #fff !important; }
+        #ahy-product-grid .actions-primary .ahy-add-to-cart:disabled { opacity: .5; cursor: not-allowed; }
+
+        /* Options panel — slide + fade in */
+        .ahy-config-panel {
+            overflow: hidden; max-height: 0; opacity: 0;
+            transition: max-height .3s ease, opacity .25s ease;
+        }
+        .ahy-config-wrap.open .ahy-config-panel { max-height: 400px; opacity: 1; }
+
+        /* Swatches */
+        .ahy-opt-group { margin: 8px 0 4px; }
+        .ahy-opt-label { font-size: 12px; color: #666; display: block; margin-bottom: 4px; }
+        .ahy-opt-swatches { display: flex; flex-wrap: wrap; gap: 4px; margin-left: 7px; }
+        .ahy-swatch {
+            border: 1px solid #ccc; background: #fff; cursor: pointer;
+            border-radius: 2px; font-size: 12px; padding: 3px 8px;
+            transition: border-color .15s, background .15s; line-height: 1.4;
+        }
+        .ahy-swatch.color { width: 22px; height: 22px; padding: 0; border-radius: 50%; }
+        .ahy-swatch:hover { border-color: #1979c3; }
+        .ahy-swatch.selected { border-color: #1979c3; background: #1979c3; color: #fff; }
+        .ahy-swatch.color.selected { border-color: #333; outline: 2px solid #1979c3; outline-offset: 2px; }
+
+        /* Panel footer: Add to Cart + Hide */
+        .ahy-panel-footer { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+        .ahy-panel-footer .ahy-add-to-cart { flex: 1; }
+        .ahy-hide-btn {
+            background: none; border: none; font-size: 12px; color: #aaa;
+            cursor: pointer; padding: 0; text-decoration: underline; flex-shrink: 0;
+            transition: color .15s;
+        }
+        .ahy-hide-btn:hover { color: #555; }
+        .product-item .action.towishlist:before{ margin: -2px 0px 0 0}
+        /* Toolbar */
+        .ahy-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+        .ahy-item-count { font-size: 14px; color: #666; }
+
+        /* Custom sort dropdown */
+        .ahy-sort-wrap { position: relative; }
+        .ahy-sort-btn {
+            display: flex; align-items: center; gap: 6px;
+            padding: 7px 12px; border: 1px solid #ccc; background: #fff;
+            border-radius: 3px; font-size: 14px; cursor: pointer; white-space: nowrap;
+            transition: border-color .15s;
+        }
+        .ahy-sort-btn:hover { border-color: #1979c3; }
+        .ahy-sort-btn .ahy-sort-arrow { font-size: 10px; transition: transform .2s; }
+        .ahy-sort-wrap.open .ahy-sort-btn { border-color: #1979c3; }
+        .ahy-sort-wrap.open .ahy-sort-arrow { transform: rotate(180deg); }
+        .ahy-sort-list {
+            display: none; position: absolute; top: calc(100% + 4px); right: 0;
+            background: #fff; border: 1px solid #ccc; border-radius: 3px;
+            box-shadow: 0 4px 12px rgba(0,0,0,.12); min-width: 100%; z-index: 50;
+        }
+        .ahy-sort-wrap.open .ahy-sort-list { display: block; list-style: none; padding-inline:10px; }
+        .ahy-sort-option {
+            padding: 9px 14px; font-size: 14px; cursor: pointer; white-space: nowrap;
+            transition: background .12s;
+        }
+        .ahy-sort-option:hover { background: #f5f5f7; }
+        .ahy-sort-option.active { color: #1979c3; font-weight: 600; }
+        /* Skeleton */
+        .ahy-skel { background: #ebebeb; border-radius: 3px; animation: ahy-pulse 1.6s ease-in-out infinite; }
+        @keyframes ahy-pulse { 0%,100%{opacity:1} 50%{opacity:.45} }
+        .ahy-skel-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; }
+        .ahy-skel-card { display: flex; flex-direction: column; gap: 10px; }
+        .ahy-skel-img { width: 100%; height: 220px; }
+        .ahy-skel-line { height: 14px; }
+        .ahy-skel-line.w80 { width: 80%; }
+        .ahy-skel-line.w50 { width: 50%; }
+        @media (max-width: 767px) { .ahy-skel-grid { grid-template-columns: repeat(2,1fr); } }
+
+        /* Filter sidebar */
+        .ahy-filter-title { font-size: 18px; font-weight: 700; margin: 0 0 12px; border-bottom: 1px solid #e0e0e0; padding-bottom: 8px; }
+        .ahy-filter-section { border-bottom: 1px solid #e0e0e0; margin-bottom: 0; }
+        .ahy-filter-section-title {
+            font-weight: 700; font-size: 14px; cursor: pointer;
+            padding: 12px 0; display: flex; justify-content: space-between; align-items: center;
+            user-select: none;
+        }
+        .ahy-filter-section-title .ahy-arrow { font-size: 10px; transition: transform .2s; }
+        .ahy-filter-section-title.collapsed .ahy-arrow { transform: rotate(-90deg); }
+        .ahy-filter-options { padding-bottom: 10px; }
+        .ahy-filter-options label { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 4px 0; cursor: pointer; }
+        .ahy-filter-options label input[type=checkbox] { margin: 0; }
+        .ahy-filter-count { color: #999; font-size: 12px; margin-left: auto; }
+        .ahy-active-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+        .ahy-tag {
+            display: inline-flex; align-items: center; gap: 4px;
+            background: #1979c3; color: #fff; font-size: 12px;
+            padding: 3px 8px; border-radius: 12px; cursor: pointer;
+        }
+        .ahy-tag:hover { background: #125e9a; }
+        .ahy-reset { font-size: 12px; color: #1979c3; text-decoration: underline; cursor: pointer; margin-bottom: 8px; display: inline-block; }
+
+        /* Toolbar actions wrapper — desktop: just the sort; mobile: filter btn + sort */
+        .ahy-toolbar-actions { display: flex; align-items: center; gap: 8px; }
+        .ahy-mobile-filter-btn { display: none; } /* hidden on desktop */
+
+        @media (max-width: 767px) {
+            .ahy-cat-sidebar { display: none; }
+
+            /* Item count on top, filter+sort on same line below */
+            .ahy-toolbar { flex-direction: column; align-items: stretch; gap: 8px; }
+            .ahy-item-count { font-size: 13px; }
+            .ahy-toolbar-actions { flex: 1; }
+
+            /* Show filter button on mobile */
+            .ahy-mobile-filter-btn {
+                display: inline-flex; align-items: center; gap: 6px;
+                padding: 8px 14px; border: 1px solid #ccc; background: #fff;
+                border-radius: 3px; font-size: 14px; cursor: pointer;
+                white-space: nowrap; transition: border-color .15s;
+            }
+            .ahy-mobile-filter-btn:hover { border-color: #1979c3; }
+
+            /* Hide sort dropdown on mobile — lives in the modal instead */
+            #ahy-sort-wrap { display: none; }
+        }
+        .ahy-mobile-active-count {
+            display: inline-flex; align-items: center; justify-content: center;
+            min-width: 18px; height: 18px; padding: 0 4px;
+            background: #1979c3; color: #fff; border-radius: 9px; font-size: 11px;
+        }
+
+        /* Filter modal drawer */
+        .ahy-filter-modal {
+            display: none; position: fixed; inset: 0; z-index: 1000;
+        }
+        .ahy-filter-modal.open { display: block; }
+        .ahy-modal-overlay {
+            position: absolute; inset: 0; background: rgba(0,0,0,.5);
+        }
+        .ahy-modal-drawer {
+            position: absolute; bottom: 0; left: 0; right: 0;
+            background: #fff; border-radius: 12px 12px 0 0;
+            max-height: 85vh; display: flex; flex-direction: column;
+            transform: translateY(100%); transition: transform .3s ease;
+        }
+        .ahy-filter-modal.open .ahy-modal-drawer { transform: translateY(0); }
+        .ahy-modal-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px; border-bottom: 1px solid #e0e0e0;
+            font-size: 16px; font-weight: 700; flex-shrink: 0;
+        }
+        .ahy-modal-close {
+            background: none; border: none; font-size: 22px; line-height: 1;
+            cursor: pointer; color: #666; padding: 0;
+        }
+        .ahy-modal-body { padding: 0 16px; overflow-y: auto; flex: 1; }
+        .ahy-modal-footer {
+            display: flex; gap: 10px; padding: 16px;
+            border-top: 1px solid #e0e0e0; flex-shrink: 0;
+        }
+        .ahy-modal-section { border-bottom: 1px solid #e0e0e0; margin-bottom: 0; padding-bottom: 4px; }
+        .ahy-modal-sort-options { display: flex; flex-direction: column; margin-bottom: 8px; }
+        .ahy-modal-sort-opt {
+            padding: 10px 0; font-size: 14px; cursor: pointer; border: none; background: none;
+            text-align: left; color: #333; display: flex; align-items: center; gap: 8px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .ahy-modal-sort-opt:last-child { border-bottom: none; }
+        .ahy-modal-sort-opt.active { color: #1979c3; font-weight: 600; }
+        .ahy-modal-sort-opt .ahy-sort-check { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #ccc; flex-shrink: 0; }
+        .ahy-modal-sort-opt.active .ahy-sort-check { border-color: #1979c3; background: #1979c3; }
+        .ahy-modal-reset-btn {
+            flex: 0 0 auto; padding: 10px 16px; border: 1px solid #ccc;
+            background: #fff; border-radius: 3px; font-size: 14px; cursor: pointer;
+        }
+        .ahy-modal-apply-btn {
+            flex: 1; padding: 10px; background: #1979c3; color: #fff;
+            border: none; border-radius: 3px; font-size: 14px; font-weight: 600;
+            cursor: pointer; transition: background .2s;
+        }
+        .ahy-modal-apply-btn:hover { background: #125e9a; }
+
+        /* Pagination */
+        .ahy-pagination { display: flex; align-items: center; justify-content: center; gap: 4px; margin-top: 24px; padding-top: 16px; border-top: 1px solid #e0e0e0; }
+        .ahy-page-btn {
+            min-width: 36px; height: 36px; padding: 0 10px;
+            border: 1px solid #ccc; background: #fff; cursor: pointer;
+            font-size: 14px; border-radius: 3px; transition: background .15s;
+        }
+        .ahy-page-btn:hover:not(:disabled) { background: #f0f0f0; }
+        .ahy-page-btn.active { background: #1979c3; color: #fff; border-color: #1979c3; font-weight: 700; }
+        .ahy-page-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+        .page-products .product-item-info { width: 100%;}
+        .ahy-sidebar-additional { margin-top: 24px; }
+        /* No results */
+        .ahy-empty { padding: 40px 0; text-align: center; color: #666; font-size: 16px; }
+
+        /* sidebar-additional is relocated into ahy-cat-sidebar by JS */
+        #ahy-sidebar-additional-slot { margin-top: 24px; }
+        .page-layout-2columns-left .sidebar-additional{width: 100%}
+    </style>
+
+    <!-- Loading skeleton shown first -->
+    <div id="ahy-did-you-mean" style="display:none;padding:10px 0 6px;font-size:14px;color:#444"></div>
+
+    <div id="ahy-loading">
+        <div class="ahy-skel-grid">
+            <?php for ($i = 0; $i < 6; $i++): ?>
+            <div class="ahy-skel-card">
+                <div class="ahy-skel ahy-skel-img"></div>
+                <div class="ahy-skel ahy-skel-line w80"></div>
+                <div class="ahy-skel ahy-skel-line w50"></div>
+            </div>
+            <?php endfor; ?>
+        </div>
+    </div>
+
+    <!-- Main layout (hidden until data loads) -->
+    <div id="ahy-results" style="display:none">
+        <div class="ahy-cat-layout">
+
+            <!-- Sidebar filters + compare/wishlist -->
+            <aside class="ahy-cat-sidebar">
+                <div id="ahy-active-filters"></div>
+                <div id="ahy-filter-panel"></div>
+                <div id="ahy-sidebar-additional-slot"></div>
+            </aside>
+
+            <!-- Products -->
+            <div class="ahy-cat-main">
+                <div class="ahy-toolbar">
+                    <span class="ahy-item-count" id="ahy-item-count"></span>
+                    <div class="ahy-toolbar-actions">
+                        <button type="button" class="ahy-mobile-filter-btn" id="ahy-open-filters">
+                            &#9776; Filter &amp; Sort
+                            <span id="ahy-mobile-active-count" class="ahy-mobile-active-count" style="display:none"></span>
+                        </button>
+                        <div class="ahy-sort-wrap" id="ahy-sort-wrap" aria-label="Sort By">
+                            <button type="button" class="ahy-sort-btn" id="ahy-sort-btn">
+                                <span id="ahy-sort-label">Sort: Relevance</span>
+                                <span class="ahy-sort-arrow">▼</span>
+                            </button>
+                            <ul class="ahy-sort-list" role="listbox">
+                                <li class="ahy-sort-option active" data-sort="relevance" role="option">Sort: Relevance</li>
+                                <li class="ahy-sort-option" data-sort="price_asc" role="option">Sort: Price Low to High</li>
+                                <li class="ahy-sort-option" data-sort="price_desc" role="option">Sort: Price High to Low</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="ahy-product-grid"></div>
+                <div id="ahy-pagination"></div>
+            </div>
+
+        </div>
+    </div>
+
+    <div id="ahy-empty" style="display:none" class="ahy-empty"></div>
+
+    <!-- Trending products section shown on zero results -->
+    <div id="ahy-trending-section" style="display:none;padding:40px 0">
+        <p id="ahy-trending-heading" style="font-size:15px;font-weight:700;color:#1d1d1f;margin:0 0 20px"></p>
+        <div id="ahy-trending-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px"></div>
+        <div id="ahy-trending-terms-wrap" style="display:none;margin-top:32px">
+            <p style="font-size:15px;font-weight:700;color:#1d1d1f;margin:0 0 14px">Trending Searches</p>
+            <div id="ahy-trending-terms" style="display:flex;flex-wrap:wrap;gap:10px"></div>
+        </div>
+    </div>
+
+    <!-- Mobile filter + sort modal -->
+    <div id="ahy-filter-modal" class="ahy-filter-modal" role="dialog" aria-modal="true" aria-label="Filter &amp; Sort">
+        <div class="ahy-modal-overlay" id="ahy-modal-overlay"></div>
+        <div class="ahy-modal-drawer">
+            <div class="ahy-modal-header">
+                <span>Filter &amp; Sort</span>
+                <button type="button" class="ahy-modal-close" id="ahy-close-filters" aria-label="Close">&#10005;</button>
+            </div>
+            <div class="ahy-modal-body">
+                <div class="ahy-modal-section">
+                    <p class="ahy-filter-title">Sort By</p>
+                    <div id="ahy-modal-sort-options" class="ahy-modal-sort-options"></div>
+                </div>
+                <div id="ahy-filter-modal-panel"></div>
+            </div>
+            <div class="ahy-modal-footer">
+                <button type="button" class="ahy-modal-reset-btn" id="ahy-modal-reset">Reset All</button>
+                <button type="button" class="ahy-modal-apply-btn" id="ahy-modal-apply">Apply</button>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<?= $block->getChildHtml('ahy_card_template') ?>
+<?= $block->getChildHtml('ahy_options_template') ?>
+
+<script>
+(function () {
+    var _state = {
+        productsApiUrl:  '<?= $productsApiUrl ?>',
+        searchToken:     '<?= $searchToken ?>',
+        categoryName:    '<?= $categoryName ?>',
+        searchQuery:     '<?= $searchQuery ?>',
+        platformStoreId: <?= $platformStoreId ?>,
+        mediaBaseUrl:    '<?= $mediaBaseUrl ?>',
+        addToCartUrl:    '<?= $addToCartUrl ?>',
+        wishlistUrl:       '<?= $wishlistUrl ?>',
+        compareUrl:        '<?= $compareUrl ?>',
+        variantImagesUrl:  '<?= $variantImagesUrl ?>',
+        analyticsUrl:      '<?= $analyticsUrl ?>',
+        eventsUrl:         '<?= $eventsUrl ?>',
+        suggestUrl:        '<?= $escaper->escapeJs($block->getSuggestUrl()) ?>',
+        page:            1,
+        pageSize:        <?= $productsPerPage ?>,
+        totalPages:      1,
+        total:           0,
+        sort:            'relevance',
+        activeFilters:    [],
+        activePriceMin:   '',
+        activePriceMax:   '',
+        activePriceRange: null,
+        pendingFilters:   [],
+        pendingPriceMin:  '',
+        pendingPriceMax:  '',
+        pendingPriceRange: null,
+        pendingSort:      'relevance',
+        priceRange:       { min: null, max: null },
+        filters:          [],
+        bypassSpell:      false,
+    };
+    // Expose so no-results modal can read token + suggestUrl
+    window._ahySearchState = _state;
+
+    function getFormKey() {
+        var m = document.cookie.match(/form_key=([^;]+)/);
+        return m ? m[1] : '';
+    }
+
+    function handlePostAction(el) {
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = el.getAttribute('data-action-url');
+        [
+            { name: 'product',  value: el.getAttribute('data-action-product') },
+            { name: 'uenc',     value: btoa(window.location.href) },
+            { name: 'form_key', value: getFormKey() },
+        ].forEach(function (f) {
+            var input = document.createElement('input');
+            input.type = 'hidden'; input.name = f.name; input.value = f.value;
+            form.appendChild(input);
+        });
+        document.body.appendChild(form);
+        form.submit();
+    }
+
+    function formatPrice(price) {
+        if (price === null || price === undefined || price === '') return '';
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(price);
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function productUrl(product) {
+        return product.url_key ? '/' + product.url_key + '.html' : '#';
+    }
+
+    function imageUrl(product) {
+        if (!product.image) {
+            return '/media/catalog/product/placeholder/default/placeholder.jpg';
+        }
+        // If already a full URL, use as-is
+        if (/^https?:\/\//.test(product.image)) {
+            return product.image;
+        }
+        var path = product.image.charAt(0) === '/' ? product.image : '/' + product.image;
+        return _state.mediaBaseUrl + path;
+    }
+
+    function getGeoCookie() {
+        var m = document.cookie.match(/(?:^|; )ahy_geo_state=([^;]*)/);
+        return m ? decodeURIComponent(m[1]) : '';
+    }
+
+    function buildApiUrl() {
+        var url = new URL(_state.productsApiUrl);
+        url.searchParams.set('search_token', _state.searchToken);
+        if (_state.searchQuery) {
+            url.searchParams.set('q', _state.searchQuery);
+        } else {
+            url.searchParams.set('category', _state.categoryName);
+        }
+        url.searchParams.set('page', _state.page);
+        url.searchParams.set('per_page', _state.pageSize);
+        if (_state.platformStoreId) url.searchParams.set('platform_store_id', _state.platformStoreId);
+        if (_state.sort !== 'relevance') url.searchParams.set('sort', _state.sort);
+        if (_state.bypassSpell) url.searchParams.set('bypass_spell', '1');
+        _state.activeFilters.forEach(function (f) {
+            url.searchParams.set(f.key, f.value);
+        });
+        if (_state.activePriceMin !== '') url.searchParams.set('price_min', _state.activePriceMin);
+        if (_state.activePriceMax !== '') url.searchParams.set('price_max', _state.activePriceMax);
+        var geoState = getGeoCookie();
+        if (geoState) url.searchParams.set('geo_state', geoState);
+        return url.toString();
+    }
+
+    function trackSearch(resultCount, responseTimeMs) {
+        if (!_state.analyticsUrl || !_state.searchToken) return;
+        fetch(_state.analyticsUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            keepalive: true,
+            body: JSON.stringify({
+                search_token:    _state.searchToken,
+                query:           _state.searchQuery,
+                result_count:    resultCount,
+                response_time_ms: responseTimeMs || 0,
+                page:            1,
+            }),
+        }).catch(function () {});
+    }
+
+    function trackClick(productId, productName, position) {
+        if (!_state.eventsUrl || !_state.searchQuery || !_state.searchToken) return;
+        fetch(_state.eventsUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            keepalive: true,
+            body: JSON.stringify({
+                search_token: _state.searchToken,
+                event_type:   'search_click',
+                query:        _state.searchQuery,
+                product_id:   String(productId),
+                product_name: productName,
+                position:     position,
+            }),
+        }).catch(function () {});
+    }
+
+    function renderDidYouMean(data) {
+        var el = document.getElementById('ahy-did-you-mean');
+        if (!el || !_state.searchQuery) { if (el) el.style.display = 'none'; return; }
+        var suggested = data.suggested_query || '';
+        var corrected = data.was_corrected   || false;
+        if (!suggested && !corrected) { el.style.display = 'none'; return; }
+        var baseUrl = window.location.pathname;
+        if (corrected) {
+            var origUrl = baseUrl + '?q=' + encodeURIComponent(_state.searchQuery) + '&bypass_spell=1';
+            el.innerHTML = 'Showing results for <strong>' + escapeHtml(data.corrected_query || _state.searchQuery) + '</strong>. '
+                         + 'Search instead for <a href="' + origUrl + '" style="color:#0071e3">' + escapeHtml(_state.searchQuery) + '</a>?';
+        } else {
+            var sugUrl = baseUrl + '?q=' + encodeURIComponent(suggested);
+            el.innerHTML = 'Did you mean <a href="' + sugUrl + '" style="color:#0071e3;font-weight:500">' + escapeHtml(suggested) + '</a>?';
+        }
+        el.style.display = '';
+    }
+
+    var _NR = {
+        enabled:      <?= $nrEnabled ? 'true' : 'false' ?>,
+        heading:      '<?= $escaper->escapeJs($nrCfg['heading'] ?? 'Trending Products') ?>',
+        productCount: <?= (int)($nrCfg['productCount'] ?? 6) ?>,
+    };
+
+    function hideTrendingSection() {
+        var el = document.getElementById('ahy-trending-section');
+        if (el) el.style.display = 'none';
+    }
+
+    function showTrendingSection(searchToken, suggestUrl, media) {
+        if (!_NR.enabled) return;
+        var section = document.getElementById('ahy-trending-section');
+        var heading = document.getElementById('ahy-trending-heading');
+        var grid    = document.getElementById('ahy-trending-grid');
+        if (!section || !grid) return;
+
+        if (heading) heading.textContent = _NR.heading;
+        grid.innerHTML = '<p style="color:#999;font-size:14px;grid-column:1/-1">Loading trending products…</p>';
+        section.style.display = '';
+
+        var url = suggestUrl + '?search_token=' + encodeURIComponent(searchToken || '') + '&q=';
+        fetch(url)
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                var products = (data.products || []).slice(0, 10);
+                var terms    = data.terms || [];
+                if (!products.length && !terms.length) { section.style.display = 'none'; return; }
+
+                // Products grid
+                if (products.length) {
+                    var cols = Math.min(products.length, 4);
+                    grid.style.gridTemplateColumns = 'repeat(' + cols + ', 1fr)';
+                    grid.innerHTML = products.map(function (p) {
+                        var href = p.url_key ? '/' + p.url_key + '.html' : '#';
+                        var name = escapeHtml(p.title || p.name || '');
+                        var img  = p.image ? (/^https?:\/\//.test(p.image) ? p.image : (media || '') + (p.image.charAt(0) === '/' ? p.image : '/' + p.image)) : '';
+                        var priceHtml = '';
+                        if (p.special_price && p.special_price < p.price) {
+                            priceHtml = '<span style="color:#d0021b;font-weight:700">$' + parseFloat(p.special_price).toFixed(2) + '</span>'
+                                      + '<span style="text-decoration:line-through;color:#aaa;margin-left:4px;font-size:11px">$' + parseFloat(p.price).toFixed(2) + '</span>';
+                        } else if (p.price) {
+                            priceHtml = '<span>$' + parseFloat(p.price).toFixed(2) + '</span>';
+                        }
+                        return '<a href="' + escapeHtml(href) + '" style="text-decoration:none;color:inherit;border-radius:10px;overflow:hidden;border:1px solid #f0f0f0;display:flex;flex-direction:column;transition:box-shadow .18s,transform .18s" onmouseover="this.style.boxShadow=\'0 8px 24px rgba(0,0,0,.10)\';this.style.transform=\'translateY(-2px)\'" onmouseout="this.style.boxShadow=\'\';this.style.transform=\'\'">'
+                             + (img ? '<div style="aspect-ratio:1;background:#f5f5f7;overflow:hidden"><img src="' + escapeHtml(img) + '" alt="' + name + '" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block"></div>' : '<div style="aspect-ratio:1;background:#f5f5f7"></div>')
+                             + '<div style="padding:10px 12px 12px;flex:1;display:flex;flex-direction:column;gap:4px">'
+                             + '<div style="font-size:12px;font-weight:600;color:#1d1d1f">' + name + '</div>'
+                             + (priceHtml ? '<div style="font-size:12px;color:#555">' + priceHtml + '</div>' : '')
+                             + '</div></a>';
+                    }).join('');
+                }
+
+                // Trending terms chips
+                var termsWrap = document.getElementById('ahy-trending-terms-wrap');
+                var termsEl   = document.getElementById('ahy-trending-terms');
+                if (terms.length && termsWrap && termsEl) {
+                    var baseUrl = window.location.origin + '/catalogsearch/result/';
+                    termsEl.innerHTML = terms.map(function (t) {
+                        var href = baseUrl + '?q=' + encodeURIComponent(t);
+                        return '<a href="' + escapeHtml(href) + '" style="display:inline-block;padding:8px 16px;border:1px solid #d2d2d7;border-radius:20px;font-size:13px;color:#1d1d1f;text-decoration:none;background:#fff;transition:background .15s,border-color .15s" onmouseover="this.style.background=\'#f5f5f7\';this.style.borderColor=\'#aaa\'" onmouseout="this.style.background=\'#fff\';this.style.borderColor=\'#d2d2d7\'">'
+                             + escapeHtml(t) + '</a>';
+                    }).join('');
+                    termsWrap.style.display = '';
+                }
+            })
+            .catch(function () { section.style.display = 'none'; });
+    }
+
+    function fetch_products() {
+        document.getElementById('ahy-loading').style.display = '';
+        document.getElementById('ahy-results').style.display = 'none';
+        document.getElementById('ahy-empty').style.display   = 'none';
+        hideTrendingSection();
+        var _t0 = performance.now();
+
+        fetch(buildApiUrl())
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                document.getElementById('ahy-loading').style.display = 'none';
+
+                renderDidYouMean(data);
+
+                if (!data.success || !data.data || data.data.length === 0) {
+                    var emptyEl = document.getElementById('ahy-empty');
+                    emptyEl.textContent = _state.searchQuery
+                        ? 'No results found for “' + _state.searchQuery + '”'
+                        : 'No products found in this category.';
+                    emptyEl.style.display = '';
+                    showTrendingSection(_state.searchToken, _state.suggestUrl, _state.mediaBaseUrl);
+                    return;
+                }
+                hideTrendingSection();
+
+                _state.total      = (data.pagination && data.pagination.total) || data.data.length;
+                _state.pageSize   = (data.pagination && data.pagination.per_page) || 24;
+                _state.totalPages = Math.max(1, Math.ceil(_state.total / _state.pageSize));
+
+                buildFilters(data.facets || []);
+                renderActiveFilters();
+                renderProducts(data.data);
+                renderPagination();
+                renderItemCount();
+
+                document.getElementById('ahy-results').style.display = '';
+
+                if (_state.searchQuery && _state.page === 1) {
+                    trackSearch(_state.total, Math.round(performance.now() - _t0));
+                }
+            })
+            .catch(function (e) {
+                console.error('[SmartSearchLuma] category fetch error', e);
+                document.getElementById('ahy-loading').style.display = 'none';
+                var emptyEl = document.getElementById('ahy-empty');
+                emptyEl.textContent = _state.searchQuery
+                    ? 'No results found for "' + _state.searchQuery + '"'
+                    : 'No products found in this category.';
+                emptyEl.style.display = '';
+            });
+    }
+
+    /* ── Filters ────────────────────────────────────────────────────────── */
+
+    function syncPendingToActive() {
+        _state.pendingFilters    = _state.activeFilters.slice();
+        _state.pendingPriceMin   = _state.activePriceMin;
+        _state.pendingPriceMax   = _state.activePriceMax;
+        _state.pendingPriceRange = _state.activePriceRange ? Object.assign({}, _state.activePriceRange) : null;
+    }
+
+    function applyFilters() {
+        _state.activeFilters    = _state.pendingFilters.slice();
+        _state.activePriceMin   = _state.pendingPriceMin;
+        _state.activePriceMax   = _state.pendingPriceMax;
+        _state.activePriceRange = _state.pendingPriceRange ? Object.assign({}, _state.pendingPriceRange) : null;
+        _state.sort             = _state.pendingSort;
+        _state.page = 1;
+        closeFilterModal();
+        fetch_products();
+    }
+
+    var SORT_OPTIONS = [
+        { value: 'relevance',  label: 'Relevance' },
+        { value: 'price_asc',  label: 'Price: Low to High' },
+        { value: 'price_desc', label: 'Price: High to Low' },
+    ];
+
+    function renderModalSortOptions() {
+        var container = document.getElementById('ahy-modal-sort-options');
+        if (!container) return;
+        container.innerHTML = '';
+        SORT_OPTIONS.forEach(function (opt) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'ahy-modal-sort-opt' + (opt.value === _state.pendingSort ? ' active' : '');
+            btn.innerHTML = '<span class="ahy-sort-check"></span>' + escapeHtml(opt.label);
+            btn.addEventListener('click', function () {
+                _state.pendingSort = opt.value;
+                container.querySelectorAll('.ahy-modal-sort-opt').forEach(function (b) { b.classList.remove('active'); b.querySelector('.ahy-sort-check').style.cssText=''; });
+                btn.classList.add('active');
+            });
+            container.appendChild(btn);
+        });
+    }
+
+    function openFilterModal() {
+        syncPendingToActive();
+        _state.pendingSort = _state.sort;
+        renderModalSortOptions();
+        renderFilterPanelInto('ahy-filter-modal-panel', false);
+        document.getElementById('ahy-filter-modal').classList.add('open');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeFilterModal() {
+        document.getElementById('ahy-filter-modal').classList.remove('open');
+        document.body.style.overflow = '';
+    }
+
+    function buildFilters(facets) {
+        if (!facets.length) return;
+
+        var priceFacet = facets.find(function (f) { return f.key === 'price'; });
+        if (priceFacet) {
+            _state.priceRange = { min: priceFacet.min ?? null, max: priceFacet.max ?? null };
+        }
+
+        _state.filters = facets
+            .filter(function (f) { return f.key !== 'price' && f.key !== 'category'; })
+            .map(function (f) {
+                return {
+                    key:     f.key,
+                    label:   f.key === 'brand' ? 'Brand' : (f.label || f.key),
+                    showAll: false,
+                    options: (f.options || []).map(function (o) { return { value: o.value, count: o.count }; }),
+                };
+            });
+
+        syncPendingToActive();
+        renderFilterPanelInto('ahy-filter-panel', true);
+    }
+
+    function priceRangeBuckets() {
+        if (_state.priceRange.min === null) return [];
+        return [
+            { label: 'Under $50',     min: '',   max: 50   },
+            { label: '$50 – $100',    min: 50,   max: 100  },
+            { label: '$100 – $250',   min: 100,  max: 250  },
+            { label: '$250 – $500',   min: 250,  max: 500  },
+            { label: '$500 – $1,000', min: 500,  max: 1000 },
+            { label: 'Over $1,000',   min: 1000, max: ''   },
+        ].filter(function (b) {
+            var lo = b.min === '' ? 0 : b.min;
+            var hi = b.max === '' ? Infinity : b.max;
+            return lo < _state.priceRange.max && hi > _state.priceRange.min;
+        });
+    }
+
+    function isPendingFilterActive(key, value) {
+        return _state.pendingFilters.some(function (f) { return f.key === key && f.value === value; });
+    }
+
+    function isPendingPriceActive(label) {
+        return _state.pendingPriceRange && _state.pendingPriceRange.label === label;
+    }
+
+    function buildFilterHtml() {
+        var html = '';
+        var buckets = priceRangeBuckets();
+        if (buckets.length) {
+            html += '<div class="ahy-filter-section">';
+            html += '<div class="ahy-filter-section-title collapsed" data-filter-toggle="price">Price <span class="ahy-arrow">▼</span></div>';
+            html += '<div class="ahy-filter-options" data-filter-id="price" style="display:none">';
+            buckets.forEach(function (b) {
+                var checked = isPendingPriceActive(b.label) ? 'checked' : '';
+                html += '<label><input type="checkbox" ' + checked + ' data-price-bucket="' + escapeHtml(b.label) + '" data-price-min="' + b.min + '" data-price-max="' + b.max + '"> ' + escapeHtml(b.label) + '</label>';
+            });
+            html += '</div></div>';
+        }
+
+        _state.filters.forEach(function (filter) {
+            var opts = filter.showAll ? filter.options : filter.options.slice(0, 5);
+            html += '<div class="ahy-filter-section">';
+            html += '<div class="ahy-filter-section-title collapsed" data-filter-toggle="' + escapeHtml(filter.key) + '">' + escapeHtml(filter.label) + ' <span class="ahy-arrow">▼</span></div>';
+            html += '<div class="ahy-filter-options" data-filter-id="' + escapeHtml(filter.key) + '" style="display:none">';
+            opts.forEach(function (opt) {
+                var checked = isPendingFilterActive(filter.key, opt.value) ? 'checked' : '';
+                var count   = opt.count != null ? ' <span class="ahy-filter-count">(' + opt.count + ')</span>' : '';
+                html += '<label><input type="checkbox" ' + checked + ' data-filter-key="' + escapeHtml(filter.key) + '" data-filter-label="' + escapeHtml(filter.label) + '" data-filter-value="' + escapeHtml(opt.value) + '"> ' + escapeHtml(opt.value) + count + '</label>';
+            });
+            if (filter.options.length > 5) {
+                html += '<button class="ahy-reset" data-show-more="' + escapeHtml(filter.key) + '">' + (filter.showAll ? 'See Less' : 'See More +') + '</button>';
+            }
+            html += '</div></div>';
+        });
+
+        return html;
+    }
+
+    function renderFilterPanelInto(containerId, immediate) {
+        var container = document.getElementById(containerId);
+        if (!container) return;
+        var html = (containerId === 'ahy-filter-panel' ? '<p class="ahy-filter-title">Filter By</p>' : '') + buildFilterHtml();
+        container.innerHTML = html;
+        bindFilterEvents(container, immediate);
+    }
+
+    function bindFilterEvents(container, immediate) {
+        // Section toggle
+        container.querySelectorAll('.ahy-filter-section-title').forEach(function (el) {
+            el.addEventListener('click', function () {
+                var key   = el.getAttribute('data-filter-toggle');
+                var panel = container.querySelector('[data-filter-id="' + key + '"]');
+                if (panel) {
+                    var hidden = panel.style.display === 'none';
+                    panel.style.display = hidden ? '' : 'none';
+                    el.classList.toggle('collapsed', !hidden);
+                }
+            });
+        });
+
+        // Price bucket checkboxes
+        container.querySelectorAll('input[data-price-bucket]').forEach(function (cb) {
+            cb.addEventListener('change', function () {
+                var label = cb.getAttribute('data-price-bucket');
+                var min   = cb.getAttribute('data-price-min');
+                var max   = cb.getAttribute('data-price-max');
+                container.querySelectorAll('input[data-price-bucket]').forEach(function (o) { if (o !== cb) o.checked = false; });
+                if (!cb.checked) {
+                    _state.activePriceRange = null; _state.activePriceMin = ''; _state.activePriceMax = '';
+                    _state.pendingPriceRange = null; _state.pendingPriceMin = ''; _state.pendingPriceMax = '';
+                } else {
+                    var range = { label: label };
+                    var pmin = min === '' ? '' : String(min);
+                    var pmax = max === '' ? '' : String(max);
+                    _state.pendingPriceRange = range; _state.pendingPriceMin = pmin; _state.pendingPriceMax = pmax;
+                    if (immediate) { _state.activePriceRange = range; _state.activePriceMin = pmin; _state.activePriceMax = pmax; }
+                }
+                if (immediate) { _state.page = 1; fetch_products(); }
+            });
+        });
+
+        // Categorical checkboxes
+        container.querySelectorAll('input[data-filter-key]').forEach(function (cb) {
+            cb.addEventListener('change', function () {
+                var key   = cb.getAttribute('data-filter-key');
+                var label = cb.getAttribute('data-filter-label');
+                var value = cb.getAttribute('data-filter-value');
+                if (cb.checked) {
+                    if (!isPendingFilterActive(key, value)) _state.pendingFilters.push({ key: key, label: label, value: value });
+                    if (immediate && !_state.activeFilters.some(function(f){ return f.key===key && f.value===value; })) {
+                        _state.activeFilters.push({ key: key, label: label, value: value });
+                    }
+                } else {
+                    _state.pendingFilters = _state.pendingFilters.filter(function (f) { return !(f.key === key && f.value === value); });
+                    if (immediate) _state.activeFilters = _state.activeFilters.filter(function (f) { return !(f.key === key && f.value === value); });
+                }
+                if (immediate) { _state.page = 1; fetch_products(); }
+            });
+        });
+
+        // Show more/less
+        container.querySelectorAll('[data-show-more]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var key    = btn.getAttribute('data-show-more');
+                var filter = _state.filters.find(function (f) { return f.key === key; });
+                if (filter) { filter.showAll = !filter.showAll; renderFilterPanelInto(container.id, immediate); }
+            });
+        });
+    }
+
+    function renderActiveFilters() {
+        var html = '';
+
+        if (_state.activeFilters.length > 0 || _state.activePriceMin !== '' || _state.activePriceMax !== '') {
+            html += '<div class="ahy-active-filters">';
+
+            _state.activeFilters.forEach(function (f) {
+                html += '<span class="ahy-tag" data-remove-key="' + escapeHtml(f.key) + '" data-remove-value="' + escapeHtml(f.value) + '">';
+                html += escapeHtml(f.label) + ': ' + escapeHtml(f.value) + ' ✕';
+                html += '</span>';
+            });
+
+            if (_state.activePriceMin !== '' || _state.activePriceMax !== '') {
+                var priceLabel = 'Price';
+                if (_state.activePriceRange) priceLabel = _state.activePriceRange.label;
+                html += '<span class="ahy-tag" data-remove-price="1">' + escapeHtml(priceLabel) + ' ✕</span>';
+            }
+
+            html += '<span class="ahy-reset" data-reset-all="1">Reset All</span>';
+            html += '</div>';
+        }
+
+        var panel = document.getElementById('ahy-active-filters');
+        panel.innerHTML = html;
+
+        panel.querySelectorAll('[data-remove-key]').forEach(function (el) {
+            el.addEventListener('click', function () {
+                var key   = el.getAttribute('data-remove-key');
+                var value = el.getAttribute('data-remove-value');
+                _state.activeFilters  = _state.activeFilters.filter(function (f) { return !(f.key === key && f.value === value); });
+                _state.pendingFilters = _state.pendingFilters.filter(function (f) { return !(f.key === key && f.value === value); });
+                _state.page = 1;
+                fetch_products();
+            });
+        });
+
+        var removePrice = panel.querySelector('[data-remove-price]');
+        if (removePrice) {
+            removePrice.addEventListener('click', function () {
+                _state.activePriceMin    = '';  _state.activePriceMax    = '';  _state.activePriceRange    = null;
+                _state.pendingPriceMin   = '';  _state.pendingPriceMax   = '';  _state.pendingPriceRange   = null;
+                _state.page = 1;
+                fetch_products();
+            });
+        }
+
+        var resetAll = panel.querySelector('[data-reset-all]');
+        if (resetAll) {
+            resetAll.addEventListener('click', function () {
+                _state.activeFilters = []; _state.activePriceMin = ''; _state.activePriceMax = ''; _state.activePriceRange = null;
+                _state.pendingFilters = []; _state.pendingPriceMin = ''; _state.pendingPriceMax = ''; _state.pendingPriceRange = null;
+                _state.page = 1;
+                fetch_products();
+            });
+        }
+    }
+
+    /* ── Products ───────────────────────────────────────────────────────── */
+
+    var COLOR_MAP = {
+        black:'#222',white:'#fff',red:'#d32f2f',blue:'#1565c0',navy:'#1a237e',
+        green:'#2e7d32',gray:'#9e9e9e',grey:'#9e9e9e',yellow:'#f9a825',
+        orange:'#e65100',purple:'#6a1b9a',pink:'#e91e63',brown:'#4e342e',
+        silver:'#bdbdbd',gold:'#f9a825',beige:'#f0e6d2',cream:'#fffde7',
+        khaki:'#c8b560',teal:'#00838f',maroon:'#880e4f',coral:'#ff7043',
+        cyan:'#0097a7',indigo:'#283593',lime:'#558b2f',magenta:'#ad1457',
+    };
+
+    var SIZES = ['XS','S','M','L','XL','XXL','2XL','3XL',
+                 '28','29','30','31','32','33','34','35','36','37','38','39',
+                 '40','41','42','43','44','45','46','47','48','49','50','51','52','53','54','55','56','57','58'];
+
+    function parseVariantAttrs(variantSku, baseSku) {
+        var parts   = variantSku.substring(baseSku.length + 1).split('-');
+        var sizeIdx = -1;
+        parts.forEach(function (p, i) { if (SIZES.indexOf(p.toUpperCase()) !== -1) sizeIdx = i; });
+        if (sizeIdx !== -1) {
+            return { Size: parts[sizeIdx], Color: parts.filter(function (_, i) { return i !== sizeIdx; }).join('-') || null };
+        }
+        return { Color: parts.join('-') };
+    }
+
+    function collectAttrMap(p) {
+        var map = {};
+        (p.variants || []).forEach(function (v) {
+            Object.entries(parseVariantAttrs(v.variant_sku, p.sku)).forEach(function (e) {
+                var key = e[0], val = e[1];
+                if (!val) return;
+                if (!map[key]) map[key] = [];
+                if (map[key].indexOf(val) === -1) map[key].push(val);
+            });
+        });
+        return map;
+    }
+
+    function buildOptionsPanel(p) {
+        var wrap    = document.getElementById('ahy-config-wrap-tpl').content.cloneNode(true).firstElementChild;
+        var optsEl  = wrap.querySelector('.ahy-opts');
+        var cartBtn = wrap.querySelector('.ahy-add-to-cart');
+
+        optsEl.dataset.baseSku   = p.sku;
+        optsEl.dataset.variants  = JSON.stringify(p.variants);
+        optsEl.dataset.parentId  = String(p.product_id); // never overwritten
+        cartBtn.dataset.productId = String(p.product_id);
+
+        Object.entries(collectAttrMap(p)).forEach(function (e) {
+            var key   = e[0], vals = e[1];
+            var group = document.getElementById('ahy-opt-group-tpl').content.cloneNode(true).firstElementChild;
+            group.querySelector('.ahy-opt-label').textContent = key;
+            var swatchBox = group.querySelector('.ahy-opt-swatches');
+
+            vals.forEach(function (val) {
+                var btn = document.getElementById('ahy-swatch-tpl').content.cloneNode(true).firstElementChild;
+                btn.dataset.attr = key;
+                btn.dataset.val  = val;
+                btn.title        = val;
+                if (key === 'Color') {
+                    btn.classList.add('color');
+                    btn.style.background = COLOR_MAP[val.toLowerCase()] || '#ccc';
+                } else {
+                    btn.textContent = val;
+                }
+                swatchBox.appendChild(btn);
+            });
+
+            optsEl.appendChild(group);
+        });
+
+        return wrap;
+    }
+
+    function resolveVariant(optsEl) {
+        var selected = {};
+        optsEl.querySelectorAll('.ahy-opt-swatches').forEach(function (row) {
+            var sel = row.querySelector('.ahy-swatch.selected');
+            if (sel) selected[sel.dataset.attr] = sel.dataset.val;
+        });
+        if (Object.keys(selected).length < optsEl.querySelectorAll('.ahy-opt-group').length) return null;
+        return JSON.parse(optsEl.dataset.variants).find(function (v) {
+            var attrs = parseVariantAttrs(v.variant_sku, optsEl.dataset.baseSku);
+            return Object.keys(selected).every(function (k) { return attrs[k] === selected[k]; });
+        }) || null;
+    }
+
+    function renderCard(p) {
+        var tpl  = document.getElementById('ahy-card-tpl').innerHTML;
+        var url  = productUrl(p);
+        var img  = imageUrl(p);
+        var name = escapeHtml(p.name || '');
+
+        var hasSpecial = p.special_price && p.special_price < p.price;
+        var priceHtml;
+        if (hasSpecial) {
+            priceHtml = '<span class="price-label">Special Price</span>'
+                + '<span class="price" style="color:#d0021b">' + escapeHtml(formatPrice(p.special_price)) + '</span>'
+                + ' <span class="old-price"><span class="price" style="text-decoration:line-through;color:#999">' + escapeHtml(formatPrice(p.price)) + '</span></span>';
+        } else if (p.price) {
+            priceHtml = '<span class="price">' + escapeHtml(formatPrice(p.price)) + '</span>';
+        } else {
+            priceHtml = '<span class="price">—</span>';
+        }
+
+        var addToCartHtml = p.type === 'configurable'
+            ? '<div class="ahy-opts-mount" data-pid="' + p.product_id + '"></div>'
+            : '<button class="action tocart ahy-add-to-cart" data-product-id="' + escapeHtml(String(p.product_id)) + '" type="button"><span>Add to Cart</span></button>';
+
+        return tpl
+            .replaceAll('{{url}}',         escapeHtml(url))
+            .replaceAll('{{name}}',        name)
+            .replaceAll('{{img}}',         escapeHtml(img))
+            .replaceAll('{{price}}',       priceHtml)
+            .replaceAll('{{options}}',     '')
+            .replaceAll('{{addToCart}}',   addToCartHtml)
+            .replaceAll('{{wishlistUrl}}', escapeHtml(_state.wishlistUrl))
+            .replaceAll('{{compareUrl}}',  escapeHtml(_state.compareUrl))
+            .replaceAll('{{productId}}',   escapeHtml(String(p.product_id)));
+    }
+
+    // Keyed by platform product_id — populated on Options open
+    var _imgCache = {};
+
+    function swapImageForColor(wrap, colorVal) {
+        var optsEl   = wrap.querySelector('.ahy-opts');
+        var imgEl    = wrap.closest('.product-item-info').querySelector('.ahy-img-wrap img');
+        var parentId = optsEl && optsEl.dataset.parentId; // always the configurable parent ID
+        if (!optsEl || !imgEl || !parentId) return;
+
+        var baseSku  = optsEl.dataset.baseSku;
+        var variants = JSON.parse(optsEl.dataset.variants);
+
+        function applyImage(imgMap) {
+            var variant = variants.find(function (v) {
+                return parseVariantAttrs(v.variant_sku, baseSku)['Color'] === colorVal;
+            });
+            if (variant && imgMap[String(variant.variant_id)]) {
+                imgEl.src = _state.mediaBaseUrl + imgMap[String(variant.variant_id)];
+            }
+        }
+
+        if (_imgCache[parentId]) {
+            applyImage(_imgCache[parentId]);
+        } else {
+            fetch(_state.variantImagesUrl + '?parent_id=' + parentId)
+                .then(function (r) { return r.json(); })
+                .then(function (map) { _imgCache[parentId] = map; applyImage(map); })
+                .catch(function () {});
+        }
+    }
+
+    function renderProducts(products) {
+        var html = '<ol class="products list items product-items">';
+        products.forEach(function (p) { html += renderCard(p); });
+        html += '</ol>';
+
+        var grid = document.getElementById('ahy-product-grid');
+        grid.innerHTML = html;
+
+        // Inject options panels via DOM — no HTML string building
+        products.forEach(function (p) {
+            if (p.type !== 'configurable') return;
+            var mount = grid.querySelector('.ahy-opts-mount[data-pid="' + p.product_id + '"]');
+            if (mount) mount.parentNode.replaceChild(buildOptionsPanel(p), mount);
+        });
+
+
+        // Track product link clicks for click-through analytics
+        if (_state.searchQuery) {
+            grid.addEventListener('click', function (e) {
+                var link = e.target.closest('.product-item-link, .product.photo');
+                if (!link) return;
+                var li       = link.closest('.product-item');
+                var cartBtn  = li && li.querySelector('[data-product-id]');
+                var pid      = cartBtn ? cartBtn.dataset.productId : null;
+                var nameEl   = li && li.querySelector('.product-item-link');
+                var name     = nameEl ? nameEl.textContent.trim() : '';
+                var items    = grid.querySelectorAll('.product-item');
+                var position = 0;
+                items.forEach(function (el, i) { if (el === li) position = i + 1; });
+                if (pid) trackClick(pid, name, position + (_state.page - 1) * _state.pageSize);
+            });
+        }
+
+        // Single delegated listener for all card interactions
+        grid.addEventListener('click', function (e) {
+            // Wishlist / Compare — own handler, no data-post so dataPost.js never binds to these
+            var postEl = e.target.closest('.ahy-post-action');
+            if (postEl) {
+                e.preventDefault();
+                handlePostAction(postEl);
+                return;
+            }
+
+            var btn = e.target.closest('button');
+            if (!btn) return;
+
+            if (btn.classList.contains('ahy-add-to-cart') && !btn.disabled) {
+                addToCart(btn.dataset.productId, btn);
+            } else if (btn.classList.contains('ahy-opts-btn')) {
+                var wrap = btn.closest('.ahy-config-wrap');
+                wrap.classList.add('open');
+                // Fetch once on open; ready before user picks a swatch
+                var pid = wrap.querySelector('.ahy-add-to-cart').dataset.productId;
+                if (pid && !_imgCache[pid]) {
+                    fetch(_state.variantImagesUrl + '?parent_id=' + pid)
+                        .then(function (r) { return r.json(); })
+                        .then(function (map) { _imgCache[pid] = map; })
+                        .catch(function () {});
+                }
+            } else if (btn.classList.contains('ahy-hide-btn')) {
+                btn.closest('.ahy-config-wrap').classList.remove('open');
+            } else if (btn.classList.contains('ahy-swatch')) {
+                btn.closest('.ahy-opt-swatches').querySelectorAll('.ahy-swatch').forEach(function (s) { s.classList.remove('selected'); });
+                btn.classList.add('selected');
+                var wrap    = btn.closest('.ahy-config-wrap');
+                var optsEl  = wrap.querySelector('.ahy-opts');
+                var cartBtn = wrap.querySelector('.ahy-add-to-cart');
+
+                // Swap image immediately on color selection, regardless of other options
+                if (btn.dataset.attr === 'Color') {
+                    swapImageForColor(wrap, btn.dataset.val);
+                }
+
+                // Enable cart only when all options are selected
+                var match = resolveVariant(optsEl);
+                if (match) {
+                    cartBtn.dataset.productId = String(match.variant_id);
+                    cartBtn.disabled = !match.in_stock;
+                    cartBtn.querySelector('span').textContent = match.in_stock ? 'Add to Cart' : 'Out of Stock';
+                } else {
+                    cartBtn.disabled = true;
+                    cartBtn.querySelector('span').textContent = 'Add to Cart';
+                }
+            }
+        });
+    }
+
+    function addToCart(productId, btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span>Adding…</span>';
+
+        var fd = new FormData();
+        fd.append('product', productId);
+        fd.append('qty', 1);
+        fd.append('form_key', getFormKey());
+
+        fetch(_state.addToCartUrl, { method: 'POST', body: fd })
+            .then(function (r) {
+                if (r.ok || r.redirected) {
+                    btn.innerHTML = '<span>Added ✓</span>';
+                    // Reload cart: Luma (require) + Hyva (CustomEvent)
+                    if (window.require) {
+                        require(['Magento_Customer/js/customer-data'], function (customerData) {
+                            customerData.reload(['cart'], true);
+                        });
+                    }
+                    window.dispatchEvent(new CustomEvent('reload-customer-section-data'));
+                } else {
+                    btn.disabled  = false;
+                    btn.innerHTML = '<span>Add to Cart</span>';
+                }
+            })
+            .catch(function () {
+                btn.disabled  = false;
+                btn.innerHTML = '<span>Add to Cart</span>';
+            });
+    }
+
+    /* ── Pagination ─────────────────────────────────────────────────────── */
+
+    function renderPagination() {
+        if (_state.totalPages <= 1) {
+            document.getElementById('ahy-pagination').innerHTML = '';
+            return;
+        }
+
+        var html  = '';
+        var p     = _state.page;
+        var total = _state.totalPages;
+
+        html += '<div class="ahy-pagination">';
+        html += '<button class="ahy-page-btn" data-page="' + (p - 1) + '" ' + (p <= 1 ? 'disabled' : '') + '>&#8249;</button>';
+
+        // Page numbers — show up to 7 with ellipsis
+        var pages = [];
+        if (total <= 7) {
+            for (var i = 1; i <= total; i++) pages.push(i);
+        } else {
+            pages = [1];
+            if (p > 3) pages.push('…');
+            for (var j = Math.max(2, p - 1); j <= Math.min(total - 1, p + 1); j++) pages.push(j);
+            if (p < total - 2) pages.push('…');
+            pages.push(total);
+        }
+
+        pages.forEach(function (pg) {
+            if (pg === '…') {
+                html += '<span style="padding:0 4px">…</span>';
+            } else {
+                html += '<button class="ahy-page-btn' + (pg === p ? ' active' : '') + '" data-page="' + pg + '">' + pg + '</button>';
+            }
+        });
+
+        html += '<button class="ahy-page-btn" data-page="' + (p + 1) + '" ' + (p >= total ? 'disabled' : '') + '>&#8250;</button>';
+        html += '</div>';
+
+        var el = document.getElementById('ahy-pagination');
+        el.innerHTML = html;
+
+        el.querySelectorAll('.ahy-page-btn[data-page]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var page = parseInt(btn.getAttribute('data-page'), 10);
+                if (!btn.disabled && page >= 1 && page <= _state.totalPages) {
+                    _state.page = page;
+                    fetch_products();
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+            });
+        });
+    }
+
+    function renderItemCount() {
+        var el = document.getElementById('ahy-item-count');
+        if (el) el.textContent = _state.total + ' Items';
+    }
+
+    /* ── Sort ───────────────────────────────────────────────────────────── */
+
+    document.addEventListener('DOMContentLoaded', function () {
+        // Custom sort dropdown
+        var sortWrap = document.getElementById('ahy-sort-wrap');
+        var sortBtn  = document.getElementById('ahy-sort-btn');
+        var sortLabel = document.getElementById('ahy-sort-label');
+        if (sortWrap && sortBtn) {
+            sortBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                sortWrap.classList.toggle('open');
+            });
+            sortWrap.querySelectorAll('.ahy-sort-option').forEach(function (opt) {
+                opt.addEventListener('click', function () {
+                    var val = opt.getAttribute('data-sort');
+                    sortWrap.querySelectorAll('.ahy-sort-option').forEach(function (o) { o.classList.remove('active'); });
+                    opt.classList.add('active');
+                    sortLabel.textContent = opt.textContent;
+                    sortWrap.classList.remove('open');
+                    _state.sort = val;
+                    _state.page = 1;
+                    fetch_products();
+                });
+            });
+            document.addEventListener('click', function () { sortWrap.classList.remove('open'); });
+        }
+
+        // Mobile filter modal
+        var openBtn  = document.getElementById('ahy-open-filters');
+        var closeBtn = document.getElementById('ahy-close-filters');
+        var overlay  = document.getElementById('ahy-modal-overlay');
+        var applyBtn = document.getElementById('ahy-modal-apply');
+        var resetBtn = document.getElementById('ahy-modal-reset');
+
+        if (openBtn)  openBtn.addEventListener('click', openFilterModal);
+        if (closeBtn) closeBtn.addEventListener('click', closeFilterModal);
+        if (overlay)  overlay.addEventListener('click', closeFilterModal);
+        if (applyBtn) applyBtn.addEventListener('click', applyFilters);
+        if (resetBtn) resetBtn.addEventListener('click', function () {
+            _state.pendingFilters = []; _state.pendingPriceMin = ''; _state.pendingPriceMax = ''; _state.pendingPriceRange = null; _state.pendingSort = 'relevance';
+            _state.activeFilters  = []; _state.activePriceMin  = ''; _state.activePriceMax  = ''; _state.activePriceRange  = null; _state.sort = 'relevance';
+            closeFilterModal();
+            fetch_products();
+        });
+
+        // Move native sidebar-additional into our sidebar column
+        var nativeSidebar = document.querySelector('.sidebar-additional');
+        var slot = document.getElementById('ahy-sidebar-additional-slot');
+        if (nativeSidebar && slot) {
+            slot.appendChild(nativeSidebar);
+        }
+
+        // Read page and bypass_spell from URL
+        var params = new URLSearchParams(window.location.search);
+        var pParam = parseInt(params.get('p') || '1', 10);
+        if (pParam > 1) _state.page = pParam;
+        if (params.get('bypass_spell') === '1') _state.bypassSpell = true;
+
+        fetch_products();
+    });
+}());
+</script>

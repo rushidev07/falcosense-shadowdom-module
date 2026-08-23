@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework-message-queue:etc/consumer.xsd">
+
+    <consumer name="smartSearchLumaProductSync"
+              queue="ahy.smartsearchluma.product.sync"
+              connection="db"
+              consumerInstance="Magento\Framework\MessageQueue\Consumer"
+              handler="Ahy\SmartSearchLuma\Model\WebhookConsumer::process"
+              maxMessages="100"/>
+
+    <consumer name="smartSearchLumaFullSync"
+              queue="ahy.smartsearchluma.full_sync"
+              connection="db"
+              consumerInstance="Magento\Framework\MessageQueue\Consumer"
+              handler="Ahy\SmartSearchLuma\Model\FullSyncConsumer::process"
+              maxMessages="1000"/>
+
+</config>

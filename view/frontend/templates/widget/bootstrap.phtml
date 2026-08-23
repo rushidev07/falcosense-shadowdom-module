@@ -1,0 +1,15 @@
+<?php
+/**
+ * The widget's entire footprint on the page: one mount point, one config
+ * payload, one script tag. Added to before.body.end — additive only, nothing
+ * existing is touched. See Block\Widget\Bootstrap for what's in the config.
+ *
+ * @var \Ahy\SmartSearchLuma\Block\Widget\Bootstrap $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+?>
+<falcosense-root data-config="<?= $escaper->escapeHtmlAttr($block->getConfigJson()) ?>"><?php if ($block->isSsrShellActive()):
+    $cardsHtml = $block->getSsrShellCardsHtml();
+    if ($cardsHtml !== ''): ?><template shadowrootmode="open"><style><?= /* @noEscape */ $block->getSsrShellCss() ?></style><ol class="fs-grid"><?= /* @noEscape */ $cardsHtml ?></ol></template><?php endif;
+endif; ?></falcosense-root>
+<script type="module" src="<?= $escaper->escapeUrl($block->getViewFileUrl('Ahy_SmartSearchLuma::js/widget/boot.js')) ?>"></script>

@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceContainer name="content">
+            <block class="Ahy\SmartSearchLuma\Block\Category"
+                   name="ahy_smartsearchluma_category"
+                   template="Ahy_SmartSearchLuma::category/results.phtml"
+                   ifconfig="smart_search/general/frontend_enabled"
+                   before="-">
+                <block class="Magento\Framework\View\Element\Template"
+                       name="ahy_card_template"
+                       template="Ahy_SmartSearchLuma::category/product_card.phtml"/>
+                <block class="Magento\Framework\View\Element\Template"
+                       name="ahy_options_template"
+                       template="Ahy_SmartSearchLuma::category/product_options.phtml"/>
+            </block>
+        </referenceContainer>
+
+        <!-- Move compare/wishlist sidebar under our filter panel (no-op when UI disabled) -->
+        <move element="div.sidebar.additional" destination="ahy_smartsearchluma_category"/>
+    </body>
+</page>

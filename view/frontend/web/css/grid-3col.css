@@ -1,0 +1,62 @@
+/* Compare (left) and Wishlist (right) row above the product image */
+.ahy-card-icons {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 8px;
+}
+
+.ahy-icon {
+    line-height: 1;
+}
+
+/**
+ * Force 3-column product grid on PLPs and search results — all breakpoints ≥ 768px.
+ * Overrides Luma's default 4-col (@screen__l) and 5-col (page-layout-1column) rules.
+ */
+
+/* ── Tablet and up (≥768px) ────────────────────────────────────────────── */
+@media (min-width: 768px) {
+    .page-products .products-grid .product-item,
+    .catalogsearch-result-index .products-grid .product-item {
+        margin-left: 2%;
+        width: calc((100% - 4%) / 3);
+    }
+
+    .page-products .products-grid .product-item:nth-child(3n + 1),
+    .catalogsearch-result-index .products-grid .product-item:nth-child(3n + 1) {
+        margin-left: 0;
+    }
+}
+
+/* ── Desktop (≥1024px) — override Luma's switch to 4-col ───────────────── */
+@media (min-width: 1024px) {
+    .products-grid .product-item {
+        width: calc((100% - 4%) / 3) !important;
+    }
+
+    .page-products .products-grid .product-item,
+    .page-products.page-layout-1column .products-grid .product-item {
+        margin-left: 2% !important;
+        width: calc((100% - 4%) / 3) !important;
+    }
+
+    .page-products .products-grid .product-item:nth-child(n),
+    .page-products.page-layout-1column .products-grid .product-item:nth-child(n) {
+        margin-left: 2% !important;
+    }
+
+    .page-products .products-grid .product-item:nth-child(3n + 1),
+    .page-products.page-layout-1column .products-grid .product-item:nth-child(3n + 1) {
+        margin-left: 0 !important;
+    }
+
+    .catalogsearch-result-index .products-grid .product-item {
+        margin-left: 2% !important;
+        width: calc((100% - 4%) / 3) !important;
+    }
+
+    .catalogsearch-result-index .products-grid .product-item:nth-child(3n + 1) {
+        margin-left: 0 !important;
+    }
+}

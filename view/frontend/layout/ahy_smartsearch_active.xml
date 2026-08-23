@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<!--
+    Applied only when Smart Search Frontend UI is enabled (via observer AddFrontendLayoutHandle).
+    Contains all native Luma block removals — when the frontend is disabled these never fire,
+    so Luma's native search, category layout, and search results page are untouched.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <!-- Header: replace native search with our overlay -->
+        <referenceBlock name="top.search" remove="true"/>
+
+        <!-- Category page: replace native product grid and sidebar -->
+        <referenceBlock name="category.products" remove="true"/>
+        <referenceContainer name="div.sidebar.main" remove="true"/>
+
+        <!-- Search results page: replace native results list and sidebar -->
+        <referenceBlock name="search_result_list" remove="true"/>
+        <referenceBlock name="search.result" remove="true"/>
+        <referenceContainer name="sidebar.main" remove="true"/>
+    </body>
+</page>

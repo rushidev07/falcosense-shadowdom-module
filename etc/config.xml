@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:App/etc/config.xsd">
+    <default>
+        <smart_search>
+            <general>
+                <frontend_enabled>1</frontend_enabled>
+                <enabled>1</enabled>
+                <widget_enabled>0</widget_enabled>
+                <ssr_shell_enabled>0</ssr_shell_enabled>
+                <api_key></api_key>
+                <endpoint_url>http://host.docker.internal:8080/api/v1/ingest/products</endpoint_url>
+                <search_url>http://host.docker.internal:8001/api/search.php</search_url>
+                <platform_store_id>1</platform_store_id>
+                <products_per_page>12</products_per_page>
+            </general>
+            <no_results_modal>
+                <enabled>1</enabled>
+                <title>No results for "{query}"</title>
+                <subtitle>Try a new search or explore what's trending.</subtitle>
+                <section_heading>Trending Products</section_heading>
+                <product_count>6</product_count>
+
+            </no_results_modal>
+            <cron>
+                <last_sync_at></last_sync_at>
+            </cron>
+        </smart_search>
+    </default>
+</config>

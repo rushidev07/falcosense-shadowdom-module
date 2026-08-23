@@ -1,0 +1,140 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
+    <system>
+
+        <tab id="ahy" translate="label" sortOrder="5">
+            <label>Ahy</label>
+        </tab>
+
+        <section id="smart_search" translate="label" sortOrder="20"
+                 showInDefault="1" showInWebsite="1" showInStore="1">
+            <label>Smart Search</label>
+            <tab>ahy</tab>
+            <resource>Ahy_SmartSearchLuma::config</resource>
+
+            <group id="general" translate="label" sortOrder="10"
+                   showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>General Settings</label>
+
+                <field id="version_info" translate="label" sortOrder="1"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label></label>
+                    <frontend_model>Ahy\SmartSearchLuma\Block\Adminhtml\System\Config\VersionInfo</frontend_model>
+                </field>
+
+                <field id="frontend_enabled" translate="label" type="select"
+                       sortOrder="5" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Enable Frontend UI</label>
+                    <comment>Controls the custom search overlay, category page, and product sliders. Disable to fall back to Luma's native search and category layout.</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+
+                <field id="enabled" translate="label" type="select"
+                       sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Enable Sync</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+
+                <field id="realtime_sync_enabled" translate="label" type="select"
+                       sortOrder="11" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Enable Real-Time Sync</label>
+                    <comment>When enabled, product saves and stock changes are synced immediately. When disabled, only the cron sync runs.</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="widget_enabled" translate="label" type="select"
+                       sortOrder="12" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Enable Shadow DOM Widget (Beta)</label>
+                    <comment>Rollout-only switch for the new Shadow DOM-isolated widget, replacing the legacy overlay/PLP templates one screen at a time. Independent of "Enable Frontend UI" above — collapses back into a single flag once the migration is complete.</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <depends>
+                        <field id="frontend_enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="ssr_shell_enabled" translate="label" type="select"
+                       sortOrder="13" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Enable SSR Shell for Category Pages (Beta)</label>
+                    <comment>Renders a real, crawlable product grid server-side (from Magento's own catalog data, not a live platform call) inside a Declarative Shadow DOM shell, which the widget then enhances in place once its JS loads. Only takes effect when the Shadow DOM Widget above is also enabled.</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <depends>
+                        <field id="widget_enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="endpoint_url" translate="label" type="text"
+                       sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Platform Endpoint URL</label>
+                    <comment>e.g. http://host.docker.internal:8080/api/v1/ingest/products</comment>
+                </field>
+
+                <field id="api_key" translate="label" type="password"
+                       sortOrder="30" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>API Key</label>
+                    <comment>X-Api-Key sent to the platform with every ingest request</comment>
+                    <config_path>smart_search/general/api_key</config_path>
+                </field>
+
+                <field id="search_url" translate="label" type="text"
+                       sortOrder="35" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Search API URL</label>
+                    <comment>e.g. http://host.docker.internal:8001/api/search.php</comment>
+                </field>
+
+                <field id="products_per_page" translate="label" type="text"
+                       sortOrder="40" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Products Per Page</label>
+                    <comment>Number of products shown per page on category and search results. Use a multiple of 6 (e.g. 12, 18, 24) to avoid orphaned products in the grid.</comment>
+                    <validate>validate-number validate-digits validate-greater-than-zero</validate>
+                </field>
+
+            </group>
+
+            <group id="no_results_modal" translate="label" sortOrder="15"
+                   showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>No Results — Trending Products Modal</label>
+
+                <field id="enabled" translate="label" type="select"
+                       sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Enable Modal</label>
+                    <comment>Show a trending products overlay when search returns no results.</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+
+                <field id="product_count" translate="label" type="text"
+                       sortOrder="50" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Number of Trending Products</label>
+                    <comment>How many products to fetch from OpenSearch (1–12).</comment>
+                    <validate>validate-number validate-digits validate-digits-range digits-range-1-12</validate>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+
+
+            </group>
+
+            <group id="tools" translate="label" sortOrder="20"
+                   showInDefault="1" showInWebsite="0" showInStore="0">
+                <label>Tools</label>
+
+                <field id="sync_status" translate="label" sortOrder="5"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Sync Status</label>
+                    <frontend_model>Ahy\SmartSearchLuma\Block\Adminhtml\System\Config\SyncStatus</frontend_model>
+                </field>
+
+                <field id="full_sync_button" translate="label" sortOrder="10"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Full Product Sync</label>
+                    <comment>Push all products to the search platform via ingest API (background). Monitor: tail -f var/log/smartsearch-full-sync.log</comment>
+                    <frontend_model>Ahy\SmartSearchLuma\Block\Adminhtml\System\Config\SyncAllButton</frontend_model>
+                </field>
+
+            </group>
+        </section>
+
+    </system>
+</config>

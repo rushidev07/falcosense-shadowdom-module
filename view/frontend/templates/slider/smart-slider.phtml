@@ -1,0 +1,484 @@
+<?php
+declare(strict_types=1);
+
+use Ahy\SmartSearchLuma\Block\Slider\Products;
+use Magento\Framework\Escaper;
+
+/** @var Products $block */
+/** @var Escaper $escaper */
+
+if (!$block->isEnabled()) return;
+$products = $block->getSliderProducts();
+if (!count($products)) return;
+
+$title            = $block->getSliderTitle();
+$sliderType       = $block->getSliderType();
+$sliderId         = 'ahy-slider-' . preg_replace('/[^a-z0-9]/', '-', strtolower($sliderType));
+$addToCartUrl     = $escaper->escapeUrl($block->getAddToCartUrl());
+$variantImagesUrl = $escaper->escapeUrl($block->getVariantImagesUrl());
+$mediaBase        = rtrim($block->getMediaBaseUrl(), '/');
+?>
+
+<!-- Options panel HTML templates (same as category page) -->
+<template id="<?= $sliderId ?>-config-wrap-tpl">
+    <div class="ahy-config-wrap">
+        <button class="ahy-opts-btn" type="button"><span>Options</span></button>
+        <div class="ahy-config-panel">
+            <div class="ahy-opts"></div>
+            <div class="ahy-panel-footer">
+                <button class="action tocart primary ahy-add-to-cart" type="button" disabled>
+                    <span>Add to Cart</span>
+                </button>
+                <button class="ahy-hide-btn" type="button">Hide</button>
+            </div>
+        </div>
+    </div>
+</template>
+<template id="<?= $sliderId ?>-opt-group-tpl">
+    <div class="ahy-opt-group">
+        <span class="ahy-opt-label"></span>
+        <div class="ahy-opt-swatches"></div>
+    </div>
+</template>
+<template id="<?= $sliderId ?>-swatch-tpl">
+    <button class="ahy-swatch" type="button"></button>
+</template>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css">
+
+<style>
+    #<?= $sliderId ?> { margin: 32px 0; }
+    #<?= $sliderId ?> .ahy-slider-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+    #<?= $sliderId ?> .ahy-slider-title  { font-size:20px; font-weight:700; color:#333; margin:0; }
+    #<?= $sliderId ?> .ahy-slider-nav    { display:flex; gap:6px; }
+    #<?= $sliderId ?> .ahy-slider-arrow  {
+        width:32px; height:32px; border:1px solid #ccc; background:#fff;
+        border-radius:50%; cursor:pointer; font-size:16px;
+        display:flex; align-items:center; justify-content:center;
+        transition:border-color .15s,color .15s; color:#333;
+    }
+    #<?= $sliderId ?> .ahy-slider-arrow:hover { border-color:#1979c3; color:#1979c3; }
+    #<?= $sliderId ?> .ahy-slider-arrow.swiper-button-disabled { opacity:.35; cursor:not-allowed; }
+    #<?= $sliderId ?> .swiper { overflow:hidden; }
+    #<?= $sliderId ?> .swiper-wrapper { padding-bottom:20px; }
+    #<?= $sliderId ?> .swiper-slide { height:auto; }
+    #<?= $sliderId ?> .swiper-scrollbar { height:4px; background:#e0e0e0; border-radius:2px; }
+    #<?= $sliderId ?> .swiper-scrollbar-drag { background:#1979c3; border-radius:2px; }
+
+    /* Card */
+    #<?= $sliderId ?> .ahy-sl-card {
+        background:#fff; border-radius:3px; overflow:hidden;
+        display:flex; flex-direction:column; height:100%;
+    }
+    #<?= $sliderId ?> .ahy-img-wrap {
+        display:block; aspect-ratio:4/5; overflow:hidden; background:#f5f5f5;
+    }
+    #<?= $sliderId ?> .ahy-img-wrap img {
+        width:100%; height:100%; object-fit:cover; display:block; transition:transform .3s ease;
+    }
+    #<?= $sliderId ?> .ahy-sl-card:hover .ahy-img-wrap img { transform:scale(1.04); }
+    #<?= $sliderId ?> .ahy-sl-info { padding:12px; flex:1; display:flex; flex-direction:column; }
+    #<?= $sliderId ?> .product-item-name { display:block; margin:0 0 4px; }
+    #<?= $sliderId ?> .product-item-link {
+        font-weight:700; font-size:14px; color:#333; text-decoration:none;
+        display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+        overflow:hidden; min-height:2.6em; line-height:1.3;
+    }
+    #<?= $sliderId ?> .product-item-link:hover { color:#1979c3; }
+    #<?= $sliderId ?> .ahy-sl-price {
+        font-size:14px; font-weight:700; color:#333; margin:8px 0 10px;
+    }
+    #<?= $sliderId ?> .ahy-sl-price .old-price { text-decoration:line-through; color:#999; font-size:12px; margin-left:4px; }
+    #<?= $sliderId ?> .ahy-sl-price .special   { color:#d0021b; }
+
+    /* Simple ATC button */
+    #<?= $sliderId ?> .ahy-sl-atc {
+        display:block; width:100%; padding:8px;
+        border:1px solid #1979c3; background:#fff;
+        color:#1979c3; font-size:13px; font-weight:600; border-radius:3px;
+        cursor:pointer; transition:background .2s,color .2s; text-align:center;
+        text-decoration:none; letter-spacing:.02em; box-sizing:border-box;
+    }
+    #<?= $sliderId ?> .ahy-sl-atc:hover  { background:#1979c3; color:#fff; }
+    #<?= $sliderId ?> .ahy-sl-atc:disabled { opacity:.5; cursor:not-allowed; }
+
+    /* Options panel — same as category page */
+    #<?= $sliderId ?> .ahy-opts-btn {
+        display:block; width:100%; padding:8px;
+        border:1px solid #1979c3; background:#fff;
+        color:#1979c3; font-size:13px; font-weight:600; border-radius:3px;
+        cursor:pointer; transition:background .2s,color .2s; box-sizing:border-box;
+    }
+    #<?= $sliderId ?> .ahy-opts-btn:hover { background:#1979c3; color:#fff; }
+    #<?= $sliderId ?> .ahy-config-wrap.open .ahy-opts-btn { display:none; }
+    #<?= $sliderId ?> .ahy-config-panel {
+        max-height:0; opacity:0; overflow:hidden;
+        transition:max-height .25s ease, opacity .2s ease;
+    }
+    #<?= $sliderId ?> .ahy-config-wrap.open .ahy-config-panel { max-height:400px; opacity:1; }
+    #<?= $sliderId ?> .ahy-opt-group   { margin-bottom:8px; }
+    #<?= $sliderId ?> .ahy-opt-label   { font-size:11px; font-weight:700; color:#555; display:block; margin-bottom:4px; text-transform:uppercase; }
+    #<?= $sliderId ?> .ahy-opt-swatches { display:flex; flex-wrap:wrap; gap:4px; padding-left:7px; }
+    #<?= $sliderId ?> .ahy-swatch {
+        padding:3px 8px; border:1px solid #ccc; border-radius:3px;
+        background:#fff; font-size:12px; cursor:pointer; transition:border-color .15s;
+    }
+    #<?= $sliderId ?> .ahy-swatch.color      { width:22px; height:22px; padding:0; border-radius:50%; }
+    #<?= $sliderId ?> .ahy-swatch:hover      { border-color:#1979c3; }
+    #<?= $sliderId ?> .ahy-swatch.selected   { border-color:#1979c3; background:#1979c3; color:#fff; }
+    #<?= $sliderId ?> .ahy-swatch.color.selected { border-color:#333; outline:2px solid #1979c3; outline-offset:2px; }
+    #<?= $sliderId ?> .ahy-panel-footer      { display:flex; gap:6px; margin-top:8px; }
+    #<?= $sliderId ?> .ahy-add-to-cart       {
+        flex:1; padding:7px; border:1px solid #1979c3; background:#1979c3;
+        color:#fff; font-size:12px; font-weight:600; border-radius:3px;
+        cursor:pointer; transition:background .2s;
+    }
+    #<?= $sliderId ?> .ahy-add-to-cart:hover    { background:#1565a0; }
+    #<?= $sliderId ?> .ahy-add-to-cart:disabled { opacity:.5; cursor:not-allowed; }
+    #<?= $sliderId ?> .ahy-hide-btn {
+        padding:7px 10px; border:1px solid #ccc; background:#fff;
+        font-size:12px; border-radius:3px; cursor:pointer; color:#555;
+    }
+    #<?= $sliderId ?> .ahy-hide-btn:hover { border-color:#999; }
+
+    @media (max-width:767px) { #<?= $sliderId ?> .ahy-slider-nav { display:none; } }
+</style>
+
+<section id="<?= $sliderId ?>">
+    <div class="ahy-slider-header">
+        <h3 class="ahy-slider-title"><?= $escaper->escapeHtml($title) ?></h3>
+        <div class="ahy-slider-nav">
+            <button class="ahy-slider-arrow <?= $sliderId ?>-prev" aria-label="Previous">&#8249;</button>
+            <button class="ahy-slider-arrow <?= $sliderId ?>-next" aria-label="Next">&#8250;</button>
+        </div>
+    </div>
+
+    <div class="swiper <?= $sliderId ?>-swiper">
+        <div class="swiper-wrapper">
+            <?php foreach ($products as $product):
+                $name         = $escaper->escapeHtml(html_entity_decode($product['name'] ?? '', ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+                $urlKey       = $product['url_key'] ?? '';
+                $productUrl   = $escaper->escapeUrl($block->getProductUrl($urlKey));
+                $image        = $product['image'] ?? '';
+                $price        = isset($product['price'])         ? (float) $product['price']         : null;
+                $specialPrice = isset($product['special_price']) ? (float) $product['special_price'] : null;
+                $isCfg        = (($product['type'] ?? '') === 'configurable');
+                $inStock      = (bool) ($product['in_stock'] ?? true);
+                $productId    = (int) ($product['product_id'] ?? $product['id'] ?? 0);
+                $hasSpecial   = $specialPrice && $price && $specialPrice < $price;
+                $variants     = $product['variants'] ?? [];
+
+                if ($image && !preg_match('#^https?://#', $image)) {
+                    $image = $mediaBase . '/' . ltrim($image, '/');
+                }
+            ?>
+            <div class="swiper-slide">
+                <div class="ahy-sl-card">
+                    <a href="<?= $productUrl ?>" class="ahy-img-wrap" tabindex="-1">
+                        <?php if ($image): ?>
+                            <img src="<?= $escaper->escapeUrl($image) ?>"
+                                 alt="<?= $escaper->escapeHtmlAttr(strip_tags($name)) ?>"
+                                 loading="lazy">
+                        <?php else: ?>
+                            <img src="<?= $escaper->escapeUrl($block->getViewFileUrl('Magento_Catalog::images/product/placeholder/image.jpg')) ?>"
+                                 alt="" loading="lazy">
+                        <?php endif; ?>
+                    </a>
+                    <div class="ahy-sl-info">
+                        <strong class="product-item-name">
+                            <a href="<?= $productUrl ?>" class="product-item-link"><?= $name ?></a>
+                        </strong>
+                        <div class="ahy-sl-price">
+                            <?php if ($hasSpecial): ?>
+                                <span class="special">$<?= number_format($specialPrice, 2) ?></span>
+                                <span class="old-price">$<?= number_format($price, 2) ?></span>
+                            <?php elseif ($price): ?>
+                                <span>$<?= number_format($price, 2) ?></span>
+                            <?php endif; ?>
+                        </div>
+                        <?php if ($isCfg && !empty($variants)): ?>
+                            <!-- Options mount — replaced by JS with the full panel -->
+                            <div class="ahy-opts-mount"
+                                 data-pid="<?= $productId ?>"
+                                 data-sku="<?= $escaper->escapeHtmlAttr($product['sku'] ?? '') ?>"
+                                 data-variants="<?= $escaper->escapeHtmlAttr(json_encode($variants, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP)) ?>">
+                            </div>
+                        <?php elseif ($isCfg): ?>
+                            <a href="<?= $productUrl ?>" class="ahy-sl-atc">Select Options</a>
+                        <?php elseif ($inStock): ?>
+                            <button type="button" class="ahy-sl-atc"
+                                    data-product-id="<?= $productId ?>">Add to Cart</button>
+                        <?php else: ?>
+                            <a href="<?= $productUrl ?>" class="ahy-sl-atc">View Details</a>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+            <?php endforeach; ?>
+        </div>
+        <div class="swiper-scrollbar"></div>
+    </div>
+</section>
+
+<script>
+(function () {
+    var SLIDER_ID        = '<?= $escaper->escapeJs($sliderId) ?>';
+    var ADD_TO_CART_URL  = '<?= $escaper->escapeJs($addToCartUrl) ?>';
+    var VARIANT_IMG_URL  = '<?= $escaper->escapeJs($variantImagesUrl) ?>';
+    var MEDIA_BASE_URL   = '<?= $escaper->escapeJs($mediaBase) ?>';
+
+    var COLOR_MAP = {
+        black:'#222',white:'#fff',red:'#d32f2f',blue:'#1565c0',navy:'#1a237e',
+        green:'#2e7d32',gray:'#9e9e9e',grey:'#9e9e9e',yellow:'#f9a825',
+        orange:'#e65100',purple:'#6a1b9a',pink:'#e91e63',brown:'#4e342e',
+        silver:'#bdbdbd',gold:'#f9a825',beige:'#f0e6d2',cream:'#fffde7',
+        khaki:'#c8b560',teal:'#00838f',maroon:'#880e4f',coral:'#ff7043',
+        cyan:'#0097a7',indigo:'#283593',lime:'#558b2f',magenta:'#ad1457',
+    };
+    var SIZES = ['XS','S','M','L','XL','XXL','2XL','3XL',
+                 '28','29','30','31','32','33','34','35','36','37','38','39',
+                 '40','41','42','43','44','45','46','47','48','49','50'];
+
+    function getFormKey() {
+        var m = document.cookie.match(/form_key=([^;]+)/);
+        return m ? m[1] : '';
+    }
+
+    function parseVariantAttrs(variantSku, baseSku) {
+        var parts   = variantSku.substring(baseSku.length + 1).split('-');
+        var sizeIdx = -1;
+        parts.forEach(function (p, i) { if (SIZES.indexOf(p.toUpperCase()) !== -1) sizeIdx = i; });
+        if (sizeIdx !== -1) {
+            return { Size: parts[sizeIdx], Color: parts.filter(function (_, i) { return i !== sizeIdx; }).join('-') || null };
+        }
+        return { Color: parts.join('-') };
+    }
+
+    function collectAttrMap(variants, baseSku) {
+        var map = {};
+        variants.forEach(function (v) {
+            Object.entries(parseVariantAttrs(v.variant_sku, baseSku)).forEach(function (e) {
+                var key = e[0], val = e[1];
+                if (!val) return;
+                if (!map[key]) map[key] = [];
+                if (map[key].indexOf(val) === -1) map[key].push(val);
+            });
+        });
+        return map;
+    }
+
+    function resolveVariant(optsEl) {
+        var selected = {};
+        optsEl.querySelectorAll('.ahy-opt-swatches').forEach(function (row) {
+            var sel = row.querySelector('.ahy-swatch.selected');
+            if (sel) selected[sel.dataset.attr] = sel.dataset.val;
+        });
+        if (Object.keys(selected).length < optsEl.querySelectorAll('.ahy-opt-group').length) return null;
+        return JSON.parse(optsEl.dataset.variants).find(function (v) {
+            var attrs = parseVariantAttrs(v.variant_sku, optsEl.dataset.baseSku);
+            return Object.keys(selected).every(function (k) { return attrs[k] === selected[k]; });
+        }) || null;
+    }
+
+    var _imgCache = {};
+
+    function swapImage(wrap, colorVal, baseSku, variants) {
+        var imgEl    = wrap.closest('.ahy-sl-card').querySelector('.ahy-img-wrap img');
+        var parentId = wrap.querySelector('.ahy-add-to-cart').dataset.parentId;
+        if (!imgEl || !parentId) return;
+
+        function apply(imgMap) {
+            var variant = variants.find(function (v) {
+                return parseVariantAttrs(v.variant_sku, baseSku)['Color'] === colorVal;
+            });
+            if (variant && imgMap[String(variant.variant_id)]) {
+                imgEl.src = MEDIA_BASE_URL + imgMap[String(variant.variant_id)];
+            }
+        }
+
+        if (_imgCache[parentId]) { apply(_imgCache[parentId]); return; }
+        fetch(VARIANT_IMG_URL + '?parent_id=' + parentId)
+            .then(function (r) { return r.json(); })
+            .then(function (map) { _imgCache[parentId] = map; apply(map); })
+            .catch(function () {});
+    }
+
+    function buildOptionsPanel(mount) {
+        var pid      = mount.dataset.pid;
+        var baseSku  = mount.dataset.sku;
+        var variants = JSON.parse(mount.dataset.variants);
+
+        var wrap    = document.getElementById(SLIDER_ID + '-config-wrap-tpl').content.cloneNode(true).firstElementChild;
+        var optsEl  = wrap.querySelector('.ahy-opts');
+        var cartBtn = wrap.querySelector('.ahy-add-to-cart');
+
+        optsEl.dataset.baseSku  = baseSku;
+        optsEl.dataset.variants = JSON.stringify(variants);
+        cartBtn.dataset.productId = pid;
+        cartBtn.dataset.parentId  = pid;
+
+        Object.entries(collectAttrMap(variants, baseSku)).forEach(function (e) {
+            var key = e[0], vals = e[1];
+            var group    = document.getElementById(SLIDER_ID + '-opt-group-tpl').content.cloneNode(true).firstElementChild;
+            group.querySelector('.ahy-opt-label').textContent = key;
+            var swatchBox = group.querySelector('.ahy-opt-swatches');
+
+            vals.forEach(function (val) {
+                var btn = document.getElementById(SLIDER_ID + '-swatch-tpl').content.cloneNode(true).firstElementChild;
+                btn.dataset.attr = key;
+                btn.dataset.val  = val;
+                btn.title        = val;
+                if (key === 'Color') {
+                    btn.classList.add('color');
+                    btn.style.background = COLOR_MAP[val.toLowerCase()] || '#ccc';
+                } else {
+                    btn.textContent = val;
+                }
+                swatchBox.appendChild(btn);
+            });
+            optsEl.appendChild(group);
+        });
+
+        return wrap;
+    }
+
+    function addToCart(productId, btn, selectedOptions) {
+        btn.disabled  = true;
+        btn.innerHTML = '<span>Adding…</span>';
+        var body = new URLSearchParams();
+        body.set('platform_product_id', productId);
+        body.set('qty', '1');
+        body.set('form_key', getFormKey());
+        if (selectedOptions && Object.keys(selectedOptions).length) {
+            body.set('selected_options', JSON.stringify(selectedOptions));
+        }
+        fetch(ADD_TO_CART_URL, { method: 'POST', body: body, credentials: 'same-origin' })
+            .then(function (r) { return r.json().catch(function () { return null; }); })
+            .then(function (data) {
+                if (data && data.success) {
+                    btn.innerHTML = '<span>Added ✓</span>';
+                    // Reload cart: Luma (require) + Hyva (CustomEvent)
+                    if (window.require) {
+                        require(['Magento_Customer/js/customer-data'], function (cd) { cd.reload(['cart'], true); });
+                    }
+                    window.dispatchEvent(new CustomEvent('reload-customer-section-data'));
+                } else {
+                    btn.disabled  = false;
+                    btn.innerHTML = '<span>Add to Cart</span>';
+                }
+            })
+            .catch(function () { btn.disabled = false; btn.innerHTML = '<span>Add to Cart</span>'; });
+    }
+
+    function init() {
+        var section = document.getElementById(SLIDER_ID);
+        if (!section) return;
+
+        // Replace all mounts with options panels
+        section.querySelectorAll('.ahy-opts-mount').forEach(function (mount) {
+            mount.parentNode.replaceChild(buildOptionsPanel(mount), mount);
+        });
+
+        // Delegated click handler
+        section.addEventListener('click', function (e) {
+            var btn = e.target.closest('button');
+            if (!btn) return;
+
+            if ((btn.classList.contains('ahy-sl-atc') || btn.classList.contains('ahy-add-to-cart')) && !btn.disabled) {
+                var selected = btn.dataset.selectedOptions ? JSON.parse(btn.dataset.selectedOptions) : null;
+                // dataset.productId is always the parent/original id — see the
+                // swatch-selection handler below. The server resolves the real
+                // variant from (parent id + selected options), never a client-
+                // guessed child id.
+                addToCart(btn.dataset.productId, btn, selected);
+
+            } else if (btn.classList.contains('ahy-opts-btn')) {
+                var wrap    = btn.closest('.ahy-config-wrap');
+                var cartBtn = wrap.querySelector('.ahy-add-to-cart');
+                wrap.classList.add('open');
+                // Reset to disabled whenever panel opens — forces fresh selection
+                wrap.querySelectorAll('.ahy-swatch').forEach(function (s) { s.classList.remove('selected'); });
+                cartBtn.disabled = true;
+                cartBtn.innerHTML = '<span>Add to Cart</span>';
+                cartBtn.dataset.productId = cartBtn.dataset.parentId;
+                // Pre-fetch variant images
+                var pid = cartBtn.dataset.parentId;
+                if (pid && !_imgCache[pid]) {
+                    fetch(VARIANT_IMG_URL + '?parent_id=' + pid)
+                        .then(function (r) { return r.json(); })
+                        .then(function (map) { _imgCache[pid] = map; })
+                        .catch(function () {});
+                }
+
+            } else if (btn.classList.contains('ahy-hide-btn')) {
+                btn.closest('.ahy-config-wrap').classList.remove('open');
+
+            } else if (btn.classList.contains('ahy-swatch')) {
+                btn.closest('.ahy-opt-swatches').querySelectorAll('.ahy-swatch').forEach(function (s) { s.classList.remove('selected'); });
+                btn.classList.add('selected');
+                var wrap    = btn.closest('.ahy-config-wrap');
+                var optsEl  = wrap.querySelector('.ahy-opts');
+                var cartBtn = wrap.querySelector('.ahy-add-to-cart');
+
+                if (btn.dataset.attr === 'Color') {
+                    swapImage(wrap, btn.dataset.val, optsEl.dataset.baseSku, JSON.parse(optsEl.dataset.variants));
+                }
+
+                // productId stays the parent id throughout — never overwritten
+                // with the resolved child's id. The selection itself (e.g.
+                // { Color: 'Black', Size: 'M' }) is what gets sent to the
+                // server, which resolves the real variant via Magento's own
+                // configurable-attribute data (VariantResolverInterface), not
+                // a client-side match against a SKU pattern.
+                var selectedOptions = {};
+                optsEl.querySelectorAll('.ahy-opt-swatches').forEach(function (row) {
+                    var sel = row.querySelector('.ahy-swatch.selected');
+                    if (sel) selectedOptions[sel.dataset.attr] = sel.dataset.val;
+                });
+
+                var match = resolveVariant(optsEl);
+                if (match) {
+                    cartBtn.dataset.selectedOptions = JSON.stringify(selectedOptions);
+                    cartBtn.disabled = !match.in_stock;
+                    cartBtn.innerHTML = '<span>' + (match.in_stock ? 'Add to Cart' : 'Out of Stock') + '</span>';
+                } else {
+                    delete cartBtn.dataset.selectedOptions;
+                    cartBtn.disabled = true;
+                    cartBtn.innerHTML = '<span>Add to Cart</span>';
+                }
+            }
+        });
+    }
+
+    function loadSwiper(cb) {
+        if (typeof Swiper !== 'undefined') { cb(); return; }
+        var s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js';
+        s.onload = cb;
+        document.head.appendChild(s);
+    }
+
+    loadSwiper(function () {
+        new Swiper('.' + SLIDER_ID + '-swiper', {
+            slidesPerView: 4,
+            spaceBetween: 12,
+            grabCursor: true,
+            navigation: {
+                prevEl: '.' + SLIDER_ID + '-prev',
+                nextEl: '.' + SLIDER_ID + '-next',
+            },
+            scrollbar: {
+                el: '#' + SLIDER_ID + ' .swiper-scrollbar',
+                draggable: true,
+            },
+            breakpoints: {
+                0:    { slidesPerView: 1, spaceBetween: 8 },
+                480:  { slidesPerView: 2, spaceBetween: 10 },
+                768:  { slidesPerView: 3, spaceBetween: 12 },
+                1024: { slidesPerView: 4, spaceBetween: 12 },
+            },
+        });
+        init();
+    });
+}());
+</script>

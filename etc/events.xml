@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Event/etc/events.xsd">
+
+    <event name="layout_load_before">
+        <observer name="ahy_smartsearchluma_frontend_layout"
+                  instance="Ahy\SmartSearchLuma\Observer\AddFrontendLayoutHandle"/>
+    </event>
+
+    <event name="catalog_product_save_after">
+        <observer name="ahy_smartsearchluma_product_save"
+                  instance="Ahy\SmartSearchLuma\Observer\ProductSaveObserver"/>
+    </event>
+
+    <event name="cataloginventory_stock_item_save_after">
+        <observer name="ahy_smartsearchluma_stock_change"
+                  instance="Ahy\SmartSearchLuma\Observer\StockChangeObserver"/>
+    </event>
+
+    <event name="sales_order_place_after">
+        <observer name="ahy_smartsearchluma_purchase_global"
+                  instance="Ahy\SmartSearchLuma\Observer\PurchaseObserver"/>
+    </event>
+
+    <event name="customer_register_success">
+        <observer name="ahy_smartsearchluma_customer_register"
+                  instance="Ahy\SmartSearchLuma\Observer\CustomerRegisterObserver"/>
+    </event>
+
+    <event name="controller_action_postdispatch_catalogsearch_result_index">
+        <observer name="ahy_smartsearchluma_search_query"
+                  instance="Ahy\SmartSearchLuma\Observer\SearchQueryObserver"/>
+    </event>
+
+</config>

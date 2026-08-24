@@ -14,6 +14,8 @@
  * shell only carries its own minimal card styling, not the full widget CSS.
  */
 
+import { applyThemeTokens } from './theme-sync.js';
+
 const styleSheetCache = new Map();
 
 /**
@@ -60,9 +62,19 @@ function applyWidgetCss(root, cssText) {
 /**
  * @param {HTMLElement} hostEl - element to attach/reuse a shadow root on
  * @param {string} cssText - the widget's own CSS, sealed inside the boundary
+ * @param {{accentColor?: string|null, fontFamily?: string|null}} [themeTokens]
+ *   Applied to hostEl before the shadow root is touched, deliberately at this
+ *   one shared choke point rather than at each call site — every surface
+ *   that ever calls this automatically gets theme-sync applied, so a future
+ *   caller can't forget it the way OVERLAY_CSS/WIDGET_CSS once duplicated a
+ *   CSS rule by hand instead of sharing one.
  * @returns {ShadowRoot}
  */
-export function getOrCreateShadowRoot(hostEl, cssText) {
+export function getOrCreateShadowRoot(hostEl, cssText, themeTokens) {
+    if (themeTokens) {
+        applyThemeTokens(hostEl, themeTokens);
+    }
+
     if (hostEl.shadowRoot) {
         // A server-rendered Declarative Shadow Root already exists (SSR-Shell) —
         // reuse it. Calling attachShadow() on a node that already has one throws,

@@ -77,8 +77,14 @@ class Search extends Template
         return $base . '/api/v1/suggest';
     }
 
+    /**
+     * The branded /fs/search URL, not the Magento-native-looking
+     * /catalogsearch/result — both render the identical page (see
+     * view/frontend/layout/fs_search_index.xml), this is purely which one
+     * the header search form itself links to.
+     */
     public function getSearchResultUrl(): string
     {
-        return $this->getUrl('catalogsearch/result');
+        return $this->getUrl('fs/search');
     }
 }

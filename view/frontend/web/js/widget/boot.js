@@ -1,17 +1,8 @@
-import { getOrCreateShadowRoot, readConfig } from './shadow-root.js';
+import { readConfig } from './shadow-root.js';
 import { attachToNativeSearch } from './search-attach.js';
-import { fetchSuggestions } from './fetch-results.js';
 import { mountTakeover } from './takeover.js';
+import { mountCategoryEnhancement } from './category-enhancement.js';
 import { addToCart, readFormKey } from './cart.js';
-
-const OVERLAY_CSS = `
-:host { all: initial; }
-.fs-overlay { font-family: system-ui, -apple-system, sans-serif; position: fixed; top: 0; left: 0; right: 0;
-  max-height: 70vh; overflow-y: auto; background: #fff; box-shadow: 0 8px 24px rgba(0,0,0,.15);
-  z-index: 2147483000; padding: 16px 24px; }
-.fs-overlay-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin-top: 12px; }
-.fs-overlay .fs-card { border: 1px solid #f0f0f0; border-radius: 8px; overflow: hidden; }
-`;
 
 /**
  * Entry point. One <falcosense-root> element, mounted once via the additive
@@ -34,8 +25,32 @@ class FalcoSenseRoot extends HTMLElement {
             onClose: () => this.closeOverlay(),
         });
 
-        if (config.pageType === 'category' || config.pageType === 'search') {
-            mountTakeover(this, {
+        // Generic close signal, independent of Escape/empty-input: closes the
+        // live-typing overlay on any click outside it. This is what makes
+        // closing actually work regardless of how a given theme's own search
+        // UI gets dismissed — e.g. a theme that clears the input via jQuery's
+        // .val() (which fires no real 'input' event, so onClose above would
+        // never otherwise run) still gets caught here, since the click that
+        // dismissed it necessarily lands outside our own shell.
+        this._outsideClickHandler = (e) => {
+            if (!this._overlayHandle) return;
+            const path = e.composedPath();
+            if (this._overlayHost && path.includes(this._overlayHost)) return;
+            if (this._searchAttachment.input && path.includes(this._searchAttachment.input)) return;
+            this.closeOverlay();
+        };
+        document.addEventListener('click', this._outsideClickHandler);
+
+        // Search and category deliberately accept opposite trade-offs. Search has
+        // no native full-text-search equivalent to fall back to, so it takes over
+        // the full page with no fallback (takeover.js). Category always has a
+        // working native grid underneath, so it only ever enhances in place once
+        // real data has arrived, and never touches the page at all on failure
+        // (category-enhancement.js) — see Helper\Data::isCategoryEnhancementEnabled.
+        // Header search (attachToNativeSearch, above) runs on every page type
+        // regardless of either branch below.
+        if (config.pageType === 'search') {
+            this._takeoverHandle = mountTakeover(this, {
                 productsApiUrl: config.productsApiUrl,
                 cartAddUrl: config.cartAddUrl,
                 mediaBaseUrl: config.mediaBaseUrl,
@@ -44,6 +59,18 @@ class FalcoSenseRoot extends HTMLElement {
                 categoryName: config.categoryName,
                 searchQuery: config.searchQuery,
                 perPage: config.perPage || 24,
+                themeAccentColor: config.themeAccentColor,
+            });
+        } else if (config.pageType === 'category' && config.categoryEnhancementActive) {
+            mountCategoryEnhancement(this, {
+                productsApiUrl: config.productsApiUrl,
+                cartAddUrl: config.cartAddUrl,
+                mediaBaseUrl: config.mediaBaseUrl,
+                searchToken: config.searchToken,
+                categoryName: config.categoryName,
+                perPage: config.perPage || 24,
+                nativeGridSelector: config.nativeGridSelector,
+                themeAccentColor: config.themeAccentColor,
             });
         }
     }
@@ -52,50 +79,66 @@ class FalcoSenseRoot extends HTMLElement {
         if (this._searchAttachment) {
             this._searchAttachment.destroy();
         }
+        if (this._outsideClickHandler) {
+            document.removeEventListener('click', this._outsideClickHandler);
+        }
         this._booted = false;
     }
 
+    /**
+     * The live "type 2+ letters -> real SPA-style results" experience,
+     * per the target architecture doc (§3: "Typing 3+ letters triggers the
+     * exact same live SPA-style overlay experience"). Reuses takeover.js's
+     * real product-grid/filters/pagination rendering rather than a
+     * simplified, overlay-only text-link view, so the header preview and the
+     * committed search-results page always look and behave identically —
+     * one rendering engine, not two that can drift apart. Mounted once on
+     * the first query, then updated in place via setQuery() on every
+     * keystroke rather than remounting (avoids re-attaching the add-to-cart
+     * listener and re-running the SSR-shell-adoption check on every
+     * keystroke).
+     */
     openOverlay(query, config) {
-        if (!this._overlayHost) {
-            this._overlayHost = document.createElement('div');
-            document.body.appendChild(this._overlayHost);
+        if (this._takeoverHandle) {
+            // Already on the committed search-results page — its own takeover
+            // instance is the results the shopper is looking at, not a preview
+            // to be replaced. Reusing it avoids mounting a second, overlapping
+            // .fs-shell at the same fixed screen position, which is the most
+            // likely cause of "overlay not displaying properly": two shells
+            // independently mounting/fetching on top of each other.
+            this._takeoverHandle.show();
+            this._takeoverHandle.setQuery(query);
+            return;
         }
-        const root = getOrCreateShadowRoot(this._overlayHost, OVERLAY_CSS);
-        root.innerHTML = '<div class="fs-overlay"><div class="fs-overlay-status">Searching…</div></div>';
 
-        fetchSuggestions(config.suggestUrl, config.searchToken, query)
-            .then((data) => this.renderOverlay(root, data, config))
-            .catch(() => {
-                root.innerHTML = ''; // no fallback UI — quietly nothing, per implementation plan §1
+        if (!this._overlayHandle) {
+            if (!this._overlayHost) {
+                this._overlayHost = document.createElement('div');
+                document.body.appendChild(this._overlayHost);
+            }
+            this._overlayHandle = mountTakeover(this._overlayHost, {
+                productsApiUrl: config.productsApiUrl,
+                cartAddUrl: config.cartAddUrl,
+                mediaBaseUrl: config.mediaBaseUrl,
+                searchToken: config.searchToken,
+                pageType: 'search',
+                searchQuery: query,
+                perPage: config.perPage || 24,
+                themeAccentColor: config.themeAccentColor,
+                anchorEl: this._searchAttachment.input,
             });
-    }
-
-    renderOverlay(root, data, config) {
-        const overlay = root.querySelector('.fs-overlay');
-        if (!overlay) return;
-
-        overlay.innerHTML = '';
-        const status = document.createElement('div');
-        status.className = 'fs-overlay-status';
-        status.textContent = `${(data.products || []).length} results`;
-        overlay.appendChild(status);
-
-        const grid = document.createElement('div');
-        grid.className = 'fs-overlay-grid';
-        for (const product of data.products || []) {
-            const link = document.createElement('a');
-            link.href = product.url_key ? '/' + product.url_key + '.html' : '#';
-            link.className = 'fs-card';
-            link.textContent = product.name || '';
-            grid.appendChild(link);
+            return;
         }
-        overlay.appendChild(grid);
-        void config;
+        this._overlayHandle.show();
+        this._overlayHandle.setQuery(query);
     }
 
     closeOverlay() {
-        if (this._overlayHost && this._overlayHost.shadowRoot) {
-            this._overlayHost.shadowRoot.innerHTML = '';
+        if (this._takeoverHandle) {
+            return; // the committed results page itself — never hide it
+        }
+        if (this._overlayHandle) {
+            this._overlayHandle.hide();
         }
     }
 }

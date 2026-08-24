@@ -43,17 +43,17 @@ class Bootstrap extends Template
     }
 
     /**
-     * Only meaningful on the category page — search results have no
-     * equivalent local Magento collection to render a shell from (Magento
-     * doesn't index full-text search the way the platform does), so the shell
-     * is scoped to categories only. The search page still gets the widget,
-     * just without a pre-rendered shell underneath it.
+     * Category browsing is deliberately never taken over by the widget (see
+     * boot.js — mountTakeover only fires for pageType 'search'), so there is
+     * no JS on category pages left to adopt this shell into a live, interactive
+     * grid. Emitting it there would leave a real, server-rendered product grid
+     * sitting inert in the page with nothing managing it. Disabled until/unless
+     * category gets its own fail-open-compatible enhancement, at which point
+     * this can be re-scoped rather than re-built.
      */
     public function isSsrShellActive(): bool
     {
-        return $this->isActive()
-            && $this->helper->isSsrShellEnabled()
-            && $this->resolvePageType() === 'category';
+        return false;
     }
 
     public function getSsrShellCss(): string
@@ -107,11 +107,17 @@ class Bootstrap extends Template
             'mediaBaseUrl' => $this->getMediaBaseUrl(),
             'searchToken' => $this->tokenService->getToken(0),
             'perPage' => $this->helper->getProductsPerPage(),
+            // Explicit override for theme-sync.js's DOM-based auto-detection —
+            // empty string means "let the frontend detect it," never a value
+            // that itself needs validating here.
+            'themeAccentColor' => $this->helper->getThemeAccentColor(),
         ];
 
         $pageType = $config['pageType'];
         if ($pageType === 'category') {
             $config['categoryName'] = $this->getCurrentCategoryName();
+            $config['categoryEnhancementActive'] = $this->helper->isCategoryEnhancementEnabled();
+            $config['nativeGridSelector'] = $this->helper->getCategoryGridSelector();
         } elseif ($pageType === 'search') {
             $config['searchQuery'] = (string) $this->getRequest()->getParam('q', '');
         }
@@ -121,9 +127,13 @@ class Bootstrap extends Template
 
     private function resolvePageType(): string
     {
+        // catalogsearch_result_index and fs_search_index render the identical
+        // page (see view/frontend/layout/fs_search_index.xml) via two different
+        // URLs — both must resolve to 'search' or the widget would silently
+        // stop taking over the page for whichever URL isn't listed here.
         return match ($this->getRequest()->getFullActionName()) {
             'catalog_category_view' => 'category',
-            'catalogsearch_result_index' => 'search',
+            'catalogsearch_result_index', 'fs_search_index' => 'search',
             default => 'other',
         };
     }

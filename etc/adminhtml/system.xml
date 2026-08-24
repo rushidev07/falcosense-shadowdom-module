@@ -66,6 +66,34 @@
                     </depends>
                 </field>
 
+                <field id="category_enhancement_enabled" translate="label" type="select"
+                       sortOrder="14" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Enable Category Page Enhancement (Beta)</label>
+                    <comment>Fail-open, deliberately the opposite of the search widget's behavior: FalcoSense's ranked results and filters only replace the native grid once real data has actually arrived. On any failure, the native category grid is left completely untouched — category/PLP browsing must never depend on FalcoSense's uptime.</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <depends>
+                        <field id="widget_enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="category_grid_selector" translate="label" type="text"
+                       sortOrder="15" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Native Category Grid Selector</label>
+                    <comment>CSS selector for the native product grid to hide once FalcoSense's enhanced grid is ready. Unlike the search input, there is no single selector guaranteed across every theme — verify this against the actual theme before relying on it. Default targets Luma-family themes.</comment>
+                    <depends>
+                        <field id="category_enhancement_enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="theme_accent_color" translate="label" type="text"
+                       sortOrder="16" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Widget Accent Color Override</label>
+                    <comment>Optional CSS color (e.g. #1565c0). Leave blank to auto-detect from the theme's own primary button color at runtime. Only needed if auto-detection picks the wrong color for a particular theme.</comment>
+                    <depends>
+                        <field id="widget_enabled">1</field>
+                    </depends>
+                </field>
+
                 <field id="endpoint_url" translate="label" type="text"
                        sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
                     <label>Platform Endpoint URL</label>

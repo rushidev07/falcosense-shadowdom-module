@@ -5,5 +5,28 @@
         <route id="smsl" frontName="smsl">
             <module name="Ahy_SmartSearchLuma"/>
         </route>
+        <!--
+            Overrides Magento_CatalogSearch's own "catalogsearch" route so
+            /catalogsearch/result/ resolves to Ahy\SmartSearchLuma\Controller\Result\Index
+            instead of the stock Magento\CatalogSearch\Controller\Result\Index, which
+            unconditionally loads a full product collection via the search engine before
+            layout even renders — dead weight now that this page's visible results come
+            from FalcoSense's own platform API, not that collection. Proven in production
+            on the Everest client site; ported here so every install behaves the same way,
+            not just the ones that happen to need it most.
+        -->
+        <route id="catalogsearch" frontName="catalogsearch">
+            <module name="Ahy_SmartSearchLuma" before="Magento_CatalogSearch"/>
+        </route>
+        <!--
+            Dedicated short "fs/search" URL for the header search form's results page,
+            so the visible address bar reads /fs/search?q=... instead of
+            /catalogsearch/result/?q=.... Same underlying page either way (see
+            fs_search_index.xml) — this exists for a consistent, branded URL on every
+            install, not something specific to any one client.
+        -->
+        <route id="fs_search" frontName="fs">
+            <module name="Ahy_SmartSearchLuma"/>
+        </route>
     </router>
 </config>

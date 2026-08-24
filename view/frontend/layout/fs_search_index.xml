@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <!--
+        Reuses catalogsearch_result_index's own block declarations rather than
+        duplicating them, so /fs/search and /catalogsearch/result always render
+        the identical page (widget takeover or legacy grid, whichever is
+        active) with one source of truth to maintain, not two.
+    -->
+    <update handle="catalogsearch_result_index"/>
+</page>

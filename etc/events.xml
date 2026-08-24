@@ -32,4 +32,12 @@
                   instance="Ahy\SmartSearchLuma\Observer\SearchQueryObserver"/>
     </event>
 
+    <!-- Same observer, since /fs/search and /catalogsearch/result render the
+         identical page — search analytics must fire the same way regardless
+         of which URL a shopper actually landed on. -->
+    <event name="controller_action_postdispatch_fs_search_index">
+        <observer name="ahy_smartsearchluma_search_query"
+                  instance="Ahy\SmartSearchLuma\Observer\SearchQueryObserver"/>
+    </event>
+
 </config>

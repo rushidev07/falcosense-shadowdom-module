@@ -6,18 +6,24 @@
             <module name="Ahy_SmartSearchLuma"/>
         </route>
         <!--
-            Overrides Magento_CatalogSearch's own "catalogsearch" route so
-            /catalogsearch/result/ resolves to Ahy\SmartSearchLuma\Controller\Result\Index
-            instead of the stock Magento\CatalogSearch\Controller\Result\Index, which
-            unconditionally loads a full product collection via the search engine before
-            layout even renders — dead weight now that this page's visible results come
-            from FalcoSense's own platform API, not that collection. Proven in production
-            on the Everest client site; ported here so every install behaves the same way,
-            not just the ones that happen to need it most.
+            The "catalogsearch" route override (Ahy\SmartSearchLuma\Controller\Result\Index
+            replacing Magento_CatalogSearch's own controller) is temporarily disabled here.
+            It triggers a fatal "Undefined array key 1" in Magento\Framework\View\Layout\
+            Generator\Block::generateBlock() on this environment — Controller\Result\Index's
+            early $page->getConfig()->getTitle() call forces layout generation at a point in
+            the request lifecycle the stock controller doesn't, and that exposes what looks
+            like a pre-existing malformed/incomplete scheduled-structure element somewhere in
+            the catalogsearch_result_index layout, not something introduced by this override
+            itself. Re-enable once that root cause is found — reverting to the stock
+            Magento_CatalogSearch controller has no effect on whether the FalcoSense widget
+            works, since Bootstrap::resolvePageType() and the widget's mount depend on the
+            resolved layout handle, not which controller class serves the route.
         -->
+        <!--
         <route id="catalogsearch" frontName="catalogsearch">
             <module name="Ahy_SmartSearchLuma" before="Magento_CatalogSearch"/>
         </route>
+        -->
         <!--
             Dedicated short "fs/search" URL for the header search form's results page,
             so the visible address bar reads /fs/search?q=... instead of

@@ -9,6 +9,7 @@ use Ahy\SmartSearchLuma\Model\Plp\PlpResult;
 use Ahy\SmartSearchLuma\Service\Plp\OpenSearchPlpProvider;
 use Ahy\SmartSearchLuma\Service\Plp\PlatformHttpClient;
 use Ahy\SmartSearchLuma\Service\Plp\PlatformRequestException;
+use Ahy\SmartSearchLuma\Service\SearchTokenService;
 use Magento\Store\Model\Store;
 use Magento\Store\Model\StoreManagerInterface;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -41,14 +42,19 @@ class OpenSearchPlpProviderTest extends TestCase
         );
         $this->storeManager->method('getStore')->willReturn($store);
 
+        $this->helper->method('getEndpointUrl')->willReturn('https://platform.test:8080/api/v1/ingest/products');
         $this->helper->method('getSearchUrl')->willReturn('https://platform.test/search');
         $this->helper->method('getApiKey')->willReturn('key-abc');
         $this->helper->method('getPlpPlatformTimeoutMs')->willReturn(500);
+
+        $tokenService = $this->createMock(SearchTokenService::class);
+        $tokenService->method('getToken')->willReturn('tok-123');
 
         $this->provider = new OpenSearchPlpProvider(
             $this->helper,
             $this->http,
             $this->storeManager,
+            $tokenService,
             $this->createMock(LoggerInterface::class),
         );
     }
@@ -172,6 +178,7 @@ class OpenSearchPlpProviderTest extends TestCase
             $helper,
             $this->http,
             $this->storeManager,
+            $this->createMock(SearchTokenService::class),
             $this->createMock(LoggerInterface::class),
         );
 

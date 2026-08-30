@@ -25,8 +25,9 @@ import { addToCart, readFormKey } from './cart.js';
 
 const URL_PARAMS_OWNED = ['p', 'product_list_order', 'price_min', 'price_max'];
 
-export function mountPlpHydration(rootEl, config) {
-    let plpEl = document.querySelector('.fs-plp');
+export function mountPlpHydration(rootEl, config, scope) {
+    const root = scope || document;
+    let plpEl = root.querySelector('.fs-plp');
     if (!plpEl) {
         return null;
     }

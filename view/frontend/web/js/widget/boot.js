@@ -3,13 +3,21 @@ import { attachToNativeSearch } from './search-attach.js';
 import { mountTakeover } from './takeover.js';
 import { mountCategoryEnhancement } from './category-enhancement.js';
 import { mountPlpHydration } from './plp-hydrate.js';
+import { mountPlpSearch } from './plp-search.js';
 import { addToCart, readFormKey } from './cart.js';
 
 /**
  * Entry point. One <falcosense-root> element, mounted once via the additive
- * before.body.end layout block, present on every page. What it does depends on
- * the server-supplied page context in its config — see the implementation
- * plan §4 (Phase 1/2).
+ * before.body.end layout block, present on every page.
+ *
+ * Rendering is unified on PlpRenderer:
+ *   - a category or /fs/search page the server already rendered (Block\Plp\Grid)
+ *     -> hydrate it in place (plp-hydrate.js);
+ *   - typing 3+ letters in the header anywhere -> a full-page search takeover
+ *     rendered from the SAME PlpRenderer fragment (plp-search.js), so the
+ *     type-ahead result and the committed page look identical;
+ *   - stores not yet on the SSR pipeline fall back to the legacy takeover /
+ *     category-enhancement paths.
  */
 class FalcoSenseRoot extends HTMLElement {
     connectedCallback() {
@@ -18,52 +26,38 @@ class FalcoSenseRoot extends HTMLElement {
 
         const config = readConfig(this);
         if (!config || !config.active) {
-            return; // config says FalcoSense isn't active for this site/store — do nothing at all
+            return; // config says FalcoSense isn't active for this site/store
         }
 
-        this._searchAttachment = attachToNativeSearch({
-            onQuery: (query) => this.openOverlay(query, config),
-            onClose: () => this.closeOverlay(),
-        });
-
-        // Generic close signal, independent of Escape/empty-input: closes the
-        // live-typing overlay on any click outside it. This is what makes
-        // closing actually work regardless of how a given theme's own search
-        // UI gets dismissed — e.g. a theme that clears the input via jQuery's
-        // .val() (which fires no real 'input' event, so onClose above would
-        // never otherwise run) still gets caught here, since the click that
-        // dismissed it necessarily lands outside our own shell.
-        this._outsideClickHandler = (e) => {
-            if (!this._overlayHandle) return;
-            const path = e.composedPath();
-            if (this._overlayHost && path.includes(this._overlayHost)) return;
-            if (this._searchAttachment.input && path.includes(this._searchAttachment.input)) return;
-            this.closeOverlay();
-        };
-        document.addEventListener('click', this._outsideClickHandler);
-
-        // Search and category deliberately accept opposite trade-offs. Search has
-        // no native full-text-search equivalent to fall back to, so it takes over
-        // the full page with no fallback (takeover.js). Category always has a
-        // working native grid underneath, so it only ever enhances in place once
-        // real data has arrived, and never touches the page at all on failure
-        // (category-enhancement.js) — see Helper\Data::isCategoryEnhancementEnabled.
-        // Header search (attachToNativeSearch, above) runs on every page type
-        // regardless of either branch below.
-        // Preferred path: the server already rendered the real, single-source
-        // grid (Block\Plp\Grid) into the light DOM. Hydrate it in place — never
-        // rebuild it, never re-fetch it for the first view. The legacy
-        // takeover/enhancement paths below are only for stores not yet on the
-        // SSR/ISR pipeline.
         const hasSsrGrid = !!document.querySelector('.fs-plp .fs-plp-payload');
-        if (hasSsrGrid && (config.pageType === 'category' || config.pageType === 'search')) {
+        const ssrListing = hasSsrGrid && (config.pageType === 'category' || config.pageType === 'search');
+
+        // 1. Full-page type-ahead. Available whenever the SSR pipeline is on
+        //    (plpGridUrl serves fragments). Falls back to the legacy overlay
+        //    only when that fragment endpoint isn't there.
+        if (config.plpGridUrl) {
+            this._plpSearch = mountPlpSearch(config);
+            this._searchAttachment = attachToNativeSearch({
+                onQuery: (query) => this._plpSearch.setQuery(query),
+                onClose: () => this._plpSearch.close(),
+            });
+        } else {
+            this._searchAttachment = attachToNativeSearch({
+                onQuery: (query) => this.openLegacyOverlay(query, config),
+                onClose: () => this.closeLegacyOverlay(),
+            });
+        }
+
+        // 2. This page is itself a server-rendered listing -> hydrate in place.
+        if (ssrListing) {
             this._plpHandle = mountPlpHydration(this, config);
             if (this._plpHandle) {
                 return;
             }
         }
 
-        if (config.pageType === 'search') {
+        // 3. Legacy fallback for stores without the SSR grid.
+        if (!hasSsrGrid && config.pageType === 'search') {
             this._takeoverHandle = mountTakeover(this, {
                 productsApiUrl: config.productsApiUrl,
                 cartAddUrl: config.cartAddUrl,
@@ -75,7 +69,7 @@ class FalcoSenseRoot extends HTMLElement {
                 perPage: config.perPage || 24,
                 themeAccentColor: config.themeAccentColor,
             });
-        } else if (config.pageType === 'category' && config.categoryEnhancementActive) {
+        } else if (!hasSsrGrid && config.pageType === 'category' && config.categoryEnhancementActive) {
             mountCategoryEnhancement(this, {
                 productsApiUrl: config.productsApiUrl,
                 cartAddUrl: config.cartAddUrl,
@@ -99,39 +93,34 @@ class FalcoSenseRoot extends HTMLElement {
         if (this._plpHandle && typeof this._plpHandle.destroy === 'function') {
             this._plpHandle.destroy();
         }
+        if (this._plpSearch) {
+            this._plpSearch.close();
+        }
         this._booted = false;
     }
 
-    /**
-     * The live "type 2+ letters -> real SPA-style results" experience,
-     * per the target architecture doc (§3: "Typing 3+ letters triggers the
-     * exact same live SPA-style overlay experience"). Reuses takeover.js's
-     * real product-grid/filters/pagination rendering rather than a
-     * simplified, overlay-only text-link view, so the header preview and the
-     * committed search-results page always look and behave identically —
-     * one rendering engine, not two that can drift apart. Mounted once on
-     * the first query, then updated in place via setQuery() on every
-     * keystroke rather than remounting (avoids re-attaching the add-to-cart
-     * listener and re-running the SSR-shell-adoption check on every
-     * keystroke).
-     */
-    openOverlay(query, config) {
+    // ── Legacy overlay (only when plpGridUrl is absent — SSR pipeline off) ──
+
+    openLegacyOverlay(query, config) {
         if (this._takeoverHandle) {
-            // Already on the committed search-results page — its own takeover
-            // instance is the results the shopper is looking at, not a preview
-            // to be replaced. Reusing it avoids mounting a second, overlapping
-            // .fs-shell at the same fixed screen position, which is the most
-            // likely cause of "overlay not displaying properly": two shells
-            // independently mounting/fetching on top of each other.
             this._takeoverHandle.show();
             this._takeoverHandle.setQuery(query);
             return;
         }
-
         if (!this._overlayHandle) {
             if (!this._overlayHost) {
                 this._overlayHost = document.createElement('div');
                 document.body.appendChild(this._overlayHost);
+            }
+            if (!this._outsideClickHandler) {
+                this._outsideClickHandler = (e) => {
+                    if (!this._overlayHandle) return;
+                    const path = e.composedPath();
+                    if (this._overlayHost && path.includes(this._overlayHost)) return;
+                    if (this._searchAttachment.input && path.includes(this._searchAttachment.input)) return;
+                    this.closeLegacyOverlay();
+                };
+                document.addEventListener('click', this._outsideClickHandler);
             }
             this._overlayHandle = mountTakeover(this._overlayHost, {
                 productsApiUrl: config.productsApiUrl,
@@ -150,13 +139,9 @@ class FalcoSenseRoot extends HTMLElement {
         this._overlayHandle.setQuery(query);
     }
 
-    closeOverlay() {
-        if (this._takeoverHandle) {
-            return; // the committed results page itself — never hide it
-        }
-        if (this._overlayHandle) {
-            this._overlayHandle.hide();
-        }
+    closeLegacyOverlay() {
+        if (this._takeoverHandle) return;
+        if (this._overlayHandle) this._overlayHandle.hide();
     }
 }
 
@@ -164,7 +149,6 @@ if (!customElements.get('falcosense-root')) {
     customElements.define('falcosense-root', FalcoSenseRoot);
 }
 
-// Exposed only so cart.js's shared logic can be triggered from markup this
-// module doesn't directly own (e.g. a slider's own Add to Cart button, per
-// the implementation plan §1's third decision) without duplicating the call.
+// Exposed so a slider's own Add to Cart button can reuse cart.js without
+// duplicating the call.
 window.FalcoSenseCart = { addToCart, readFormKey };

@@ -37,11 +37,20 @@ Also found:
 | `view/frontend/web/js/widget/search-attach.js` | Binds **every** `#search_mini_form input[name="q"]`, not just the first — fixes the hidden-mobile-copy problem on responsive themes. |
 | `view/frontend/layout/catalog_category_view.xml` | Removed the legacy `<move element="div.sidebar.additional" …>` (Luma-only block name; the SSR grid doesn't use it). |
 
+**Round 3 — one look, full-page search (not a modal):**
+| File | Change |
+|---|---|
+| `view/frontend/web/css/plp.css` (new) + `view/frontend/layout/default.xml` | The listing CSS moved out of `grid.phtml` into one globally-loaded stylesheet, so a fragment injected onto a page that never rendered `PlpRenderer` (the type-ahead on the homepage) is still styled. `grid.phtml` now only carries the one dynamic rule (hide the native shell). |
+| `view/frontend/web/js/widget/plp-search.js` (new) | Full-page type-ahead. Typing 3+ letters hides the current page's main content and drops PlpRenderer's grid (fetched from `/smsl/plp/grid`) in its place — same markup/CSS as the committed `/fs/search` page. Real history entry (`/fs/search?q=…`), Back returns to where the shopper was. **Not** a fixed overlay/modal. |
+| `view/frontend/web/js/widget/boot.js` | Rewired: header type-ahead → `plp-search.js` (full page) instead of `takeover.js` (overlay). The legacy overlay is kept only for stores with no `plpGridUrl` (SSR pipeline off). |
+| `view/frontend/web/js/widget/plp-hydrate.js` | Takes an optional `scope` arg so it can hydrate a grid inside the type-ahead container, not just `document`. |
+| `Service/Plp/OpenSearchPlpProvider.php` | Server call now hits `{endpoint_url base}/api/v1/products` (the **same** endpoint the storefront JS uses) and sends the **`search_token`** (the browser's credential) alongside `api_key`. The old code called the separate `search_url` (`search.php`) with `api_key` only — the likely reason category/search server renders returned nothing. |
+
 **Theme fix (TL applies):**
 | `design/.../Magento_Theme/templates/html/header/search-form.phtml` | **Replaced** the 2,008-line file with a minimal Everest-styled input. Rollback: `search-form.phtml.ROLLBACK_full_20260813`. |
 | `design/.../Magento_Catalog/layout/catalog_category_view.xml` | **Delete the line** `<referenceBlock name="category.products" remove="true"/>`. The theme permanently deleting the native grid is why category pages go blank when FalcoSense isn't rendering. `CategoryListPlugin` already suppresses it *conditionally*. |
 
-**Sync note:** all `Ahy_SmartSearchLuma` module changes are now in the canonical repo (`falcosense-shadowdom-module`). The two theme files above are Everest-specific and stay in the theme.
+**Sync note:** all `Ahy_SmartSearchLuma` module changes are in the canonical repo (`falcosense-shadowdom-module`). The two theme files above are Everest-specific and stay in the theme.
 
 ---
 

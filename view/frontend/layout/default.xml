@@ -1,6 +1,15 @@
 <?xml version="1.0"?>
 <page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
       xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <head>
+        <!--
+            One stylesheet for every FalcoSense listing surface — the SSR
+            category/search pages, the swapped fragments, and the full-page
+            type-ahead takeover (which can be injected onto a page that never
+            rendered PlpRenderer, e.g. the homepage). Small, cacheable.
+        -->
+        <css src="Ahy_SmartSearchLuma::css/plp.css"/>
+    </head>
     <body>
         <referenceBlock name="before.body.end">
             <block class="Ahy\SmartSearchLuma\Block\GeoConsent"

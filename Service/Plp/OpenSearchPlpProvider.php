@@ -9,6 +9,7 @@ use Ahy\SmartSearchLuma\Model\Plp\PlpFacet;
 use Ahy\SmartSearchLuma\Model\Plp\PlpItem;
 use Ahy\SmartSearchLuma\Model\Plp\PlpQuery;
 use Ahy\SmartSearchLuma\Model\Plp\PlpResult;
+use Ahy\SmartSearchLuma\Service\SearchTokenService;
 use Magento\Framework\UrlInterface;
 use Magento\Store\Model\StoreManagerInterface;
 use Psr\Log\LoggerInterface;
@@ -23,12 +24,13 @@ use Psr\Log\LoggerInterface;
  * ASSUMED CONTRACT (D3 in FALCOSENSE-PLP-ISR-BUILD.md — confirm against the
  * real endpoint, then adjust only this class):
  *
- *   GET {search_url}
+ *   GET {endpoint_base}/api/v1/products      // same endpoint the storefront JS calls
  *     ?category={name}          | q={query}
  *     &store_id={platformStoreId}
  *     &page={n}&per_page={n}
  *     &sort={relevance|price_asc|price_desc|name_asc|newest}
- *     &api_key={key}                 // server auth is the API key; the browser search_token is not used here
+ *     &search_token={token}            // primary auth (same as the browser); api_key sent too as fallback
+ *     &api_key={key}
  *     [&filter[{code}][]={value} ...]
  *     [&price_min={n}&price_max={n}]
  *
@@ -69,23 +71,24 @@ class OpenSearchPlpProvider implements PlpDataProviderInterface
         private readonly Data $helper,
         private readonly PlatformHttpClient $http,
         private readonly StoreManagerInterface $storeManager,
+        private readonly SearchTokenService $tokenService,
         private readonly LoggerInterface $logger,
     ) {
     }
 
     public function fetch(PlpQuery $query): PlpResult
     {
-        $searchUrl = $this->helper->getSearchUrl($query->storeId);
-        $apiKey    = $this->helper->getApiKey($query->storeId);
+        $productsUrl = $this->productsUrl($query->storeId);
+        $apiKey      = $this->helper->getApiKey($query->storeId);
 
-        if ($searchUrl === '' || $apiKey === '') {
-            $this->logger->warning('[SmartSearchLuma][PLP] Search URL or API key not configured — cannot render from platform.');
+        if ($productsUrl === '' || $apiKey === '') {
+            $this->logger->warning('[SmartSearchLuma][PLP] Platform endpoint URL or API key not configured — cannot render from platform.');
             return PlpResult::unavailable();
         }
 
         try {
             $response = $this->http->getJson(
-                $searchUrl,
+                $productsUrl,
                 $this->buildParams($query, $apiKey),
                 ['X-Api-Key: ' . $apiKey],
                 $this->helper->getPlpPlatformTimeoutMs($query->storeId)
@@ -96,6 +99,28 @@ class OpenSearchPlpProvider implements PlpDataProviderInterface
         }
 
         return $this->mapResponse($response, $query);
+    }
+
+    /**
+     * Same endpoint the storefront JS uses: {endpoint_base}/api/v1/products.
+     * Falls back to the standalone `search_url` config if `endpoint_url` isn't
+     * set, for older installs.
+     */
+    private function productsUrl(int $storeId): string
+    {
+        $endpoint = $this->helper->getEndpointUrl($storeId);
+        if ($endpoint !== '') {
+            $parts = parse_url($endpoint);
+            $base  = ($parts['scheme'] ?? 'https') . '://' . ($parts['host'] ?? '');
+            if (!empty($parts['port'])) {
+                $base .= ':' . $parts['port'];
+            }
+            if (($parts['host'] ?? '') !== '') {
+                return $base . '/api/v1/products';
+            }
+        }
+
+        return $this->helper->getSearchUrl($storeId);
     }
 
     /**
@@ -110,6 +135,18 @@ class OpenSearchPlpProvider implements PlpDataProviderInterface
             'sort'     => self::SORT_MAP[$query->sort] ?? $query->sort,
             'api_key'  => $apiKey,
         ];
+
+        // The storefront search endpoint authenticates with the short-lived
+        // search_token (same credential the browser sends); api_key above is a
+        // fallback. Token fetch is cached, so this is cheap after the first call.
+        try {
+            $token = $this->tokenService->getToken($query->storeId);
+            if ($token !== '') {
+                $params['search_token'] = $token;
+            }
+        } catch (\Throwable $e) {
+            // proceed with api_key only
+        }
 
         if ($query->isSearch()) {
             $params['q'] = $query->searchQuery;

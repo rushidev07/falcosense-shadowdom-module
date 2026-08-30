@@ -1,0 +1,170 @@
+/**
+ * The one stylesheet for every FalcoSense listing surface:
+ *   - the server-rendered category & /fs/search pages (Block\Plp\Grid),
+ *   - the fragment swapped in on every filter/sort/page change,
+ *   - the full-page type-ahead takeover (plp-search.js).
+ *
+ * Loaded globally (view/frontend/layout/default.xml) so an injected fragment is
+ * styled even on a page that never rendered PlpRenderer itself (e.g. typing in
+ * the header on the homepage). All .fs-plp* — self-contained, tuned to the
+ * Everest palette; swap the custom properties to re-skin.
+ */
+
+.fs-plp {
+    --fs-ink: #0d2f47;
+    --fs-ink-soft: #6b7a84;
+    --fs-line: #e3ddcf;
+    --fs-accent: #e63232;
+    --fs-surface: #f4efe4;
+    --fs-card-radius: 4px;
+    margin: 0 0 48px;
+    color: var(--fs-ink);
+    font-family: inherit;
+    font-size: 15px;
+}
+.fs-plp *, .fs-plp *::before, .fs-plp *::after { box-sizing: border-box; }
+.fs-plp a { color: inherit; text-decoration: none; }
+.fs-plp button { font: inherit; cursor: pointer; }
+.fs-plp [hidden] { display: none !important; }
+
+.fs-plp-layout { display: flex; align-items: flex-start; gap: 48px; }
+.fs-plp-main { flex: 1 1 auto; min-width: 0; }
+
+/* ── Sidebar ─────────────────────────────────────────────── */
+.fs-plp-sidebar { flex: 0 0 250px; width: 250px; }
+.fs-plp-sidebar-count {
+    margin: 0 0 20px; padding-bottom: 12px;
+    border-bottom: 4px solid var(--fs-ink);
+    font-size: 14px; font-weight: 700;
+}
+.fs-plp-active { margin-bottom: 16px; }
+.fs-plp-active-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; font-weight: 700; }
+.fs-plp-clear-all { border: 0; background: none; color: var(--fs-ink); font-size: 12px; font-weight: 700; padding: 0; }
+.fs-plp-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.fs-plp-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px; border: 1px solid var(--fs-line); border-radius: 9999px;
+    background: #fff; font-size: 12px; color: var(--fs-ink);
+}
+.fs-plp-chip:hover { background: var(--fs-surface); }
+
+.fs-plp-fgroup { border-top: 2px solid #fff; padding: 16px 0; }
+.fs-plp-fgroup:first-child { border-top: 0; padding-top: 0; }
+.fs-plp-fhead {
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%; border: 0; background: none; padding: 0 0 12px;
+    font-size: 17px; font-weight: 700; color: var(--fs-ink);
+}
+.fs-plp-fhead svg { transition: transform .15s ease; flex-shrink: 0; }
+.fs-plp-fgroup.is-collapsed .fs-plp-fhead svg { transform: rotate(180deg); }
+.fs-plp-fgroup.is-collapsed .fs-plp-fopts { display: none; }
+.fs-plp-fopts { list-style: none; margin: 0; padding: 0; }
+.fs-plp-fopt {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px; margin: 0 -8px; border-radius: 9999px;
+    cursor: pointer; transition: background-color .15s ease;
+}
+.fs-plp-fopt:hover, .fs-plp-fopt.is-active { background: #fff; }
+.fs-plp-fopt input { accent-color: var(--fs-ink); width: 15px; height: 15px; flex-shrink: 0; }
+.fs-plp-fopt-label { flex: 1; font-size: 13px; color: #374151; }
+.fs-plp-fopt.is-active .fs-plp-fopt-label { font-weight: 600; }
+.fs-plp-fopt-count { font-size: 13px; color: var(--fs-ink); flex-shrink: 0; }
+.fs-plp-more { border: 0; background: none; color: var(--fs-ink); font-size: 13px; font-weight: 700; padding: 6px 0 0; }
+.fs-plp-more:hover { text-decoration: underline; }
+
+/* ── Toolbar ─────────────────────────────────────────────── */
+.fs-plp-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 16px; margin-bottom: 20px; }
+.fs-plp-filter-toggle {
+    display: none; margin-right: auto;
+    padding: 8px 16px; border: 1px solid var(--fs-ink); border-radius: 9999px;
+    background: #fff; font-size: 13px; font-weight: 700; color: var(--fs-ink);
+}
+.fs-plp-sort-label { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--fs-ink); }
+.fs-plp-sort select {
+    padding: 7px 12px; border: 1px solid var(--fs-line); border-radius: 9999px;
+    background: #fff; font: inherit; font-size: 13px; color: var(--fs-ink);
+}
+
+/* ── Grid + cards ────────────────────────────────────────── */
+.fs-plp-grid {
+    list-style: none; margin: 0; padding: 0;
+    display: grid; gap: 32px 20px;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+}
+@media (min-width: 1280px) { .fs-plp-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.fs-plp-card {
+    position: relative; display: flex; flex-direction: column;
+    background: #fff; border-radius: var(--fs-card-radius); overflow: hidden;
+}
+.fs-plp-card-wish {
+    position: absolute; top: 10px; right: 10px; z-index: 2;
+    width: 36px; height: 36px; border-radius: 9999px;
+    border: 1px solid #d1d5db; background: #fff; color: var(--fs-ink);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 1px 2px rgba(0,0,0,.08);
+}
+.fs-plp-card-wish:hover, .fs-plp-card-wish.is-active { color: var(--fs-accent); }
+.fs-plp-card-media { display: block; aspect-ratio: 1 / 1; }
+.fs-plp-card-media img { width: 100%; height: 100%; object-fit: contain; padding: 12px; display: block; }
+.fs-plp-card-title {
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    margin: 4px 16px 0; min-height: 3rem;
+    font-size: 17px; font-weight: 800; line-height: 1.3; color: var(--fs-ink);
+}
+.fs-plp-card-title:hover { text-decoration: underline; }
+.fs-plp-card-seller { margin: 4px 16px 0; font-size: 12px; color: var(--fs-ink-soft); }
+.fs-plp-card-price { margin: 8px 16px 0; min-height: 3rem; display: flex; flex-direction: column; align-items: flex-start; }
+.fs-plp-price-flag { font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--fs-accent); }
+.fs-plp-price-now { font-size: 22px; font-weight: 800; color: var(--fs-ink); }
+.fs-plp-price-was { font-size: 14px; color: var(--fs-ink-soft); }
+.fs-plp-card-price--sale { flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.fs-plp-card-price--none { font-weight: 700; color: var(--fs-ink); }
+.fs-plp-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: auto 16px 16px; padding-top: 12px; }
+.fs-plp-card-ship { font-size: 13px; font-weight: 600; color: #111827; }
+.fs-plp-card-add {
+    flex-shrink: 0; padding: 8px 18px; border: 2px solid var(--fs-ink); border-radius: 9999px;
+    background: #fff; font-size: 13px; font-weight: 700; color: var(--fs-ink);
+}
+.fs-plp-card-add:hover { box-shadow: inset 0 0 0 1px var(--fs-ink); }
+.fs-plp-card-add[disabled] { opacity: .5; cursor: default; border-color: #cbd5e1; color: #94a3b8; }
+
+.fs-plp-empty { padding: 48px 0; font-size: 16px; color: var(--fs-ink-soft); }
+.fs-plp[aria-busy="true"] .fs-plp-main { opacity: .5; transition: opacity .15s ease; }
+
+/* ── Pagination ──────────────────────────────────────────── */
+.fs-plp-pagination {
+    display: flex; align-items: center; justify-content: center; gap: 16px;
+    margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--fs-line); font-size: 14px;
+}
+.fs-plp-page { padding: 9px 22px; border: 1px solid var(--fs-ink); border-radius: 9999px; font-weight: 700; color: var(--fs-ink); }
+.fs-plp-page:hover { background: var(--fs-ink); color: #fff; }
+.fs-plp-page-status { color: var(--fs-ink-soft); }
+
+/* ── Full-page type-ahead takeover ───────────────────────── */
+body.fs-plp-search-active [data-fs-hidden-by-search] { display: none !important; }
+.fs-plp-fullpage { display: block; padding: 8px 0 24px; }
+.fs-plp-fullpage-head {
+    margin: 0 0 24px;
+    font-size: clamp(28px, 5vw, 56px); font-weight: 800; line-height: 1.05;
+    text-transform: uppercase; color: #0d2f47;
+}
+.fs-plp-fullpage .fs-plp-loading {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 40vh; color: #6b7a84; font-size: 15px;
+}
+
+/* ── Mobile ──────────────────────────────────────────────── */
+@media (max-width: 767px) {
+    .fs-plp-layout { display: block; }
+    .fs-plp-filter-toggle { display: inline-block; }
+    .fs-plp-sidebar {
+        position: fixed; inset: 0 0 0 auto; z-index: 2147482000;
+        width: min(88vw, 340px); background: var(--fs-surface);
+        padding: 20px; overflow-y: auto;
+        transform: translateX(100%); transition: transform .2s ease;
+    }
+    .fs-plp[data-filters-open="1"] .fs-plp-sidebar { transform: translateX(0); }
+    .fs-plp[data-filters-open="1"]::before {
+        content: ""; position: fixed; inset: 0; z-index: 2147481999; background: rgba(13,47,71,.35);
+    }
+}

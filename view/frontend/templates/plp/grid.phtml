@@ -6,6 +6,12 @@
  * show. The Shadow DOM widget hydrates this markup in place — it does not
  * rebuild it.
  *
+ * Styling below is tuned to the Everest (Ahy_Everest2) palette — deep blue
+ * #0d2f47, marketplace red #e63232, rounded pills — but stays FalcoSense-
+ * namespaced (.fs-plp*) so it can't disturb, and isn't disturbed by, the host
+ * theme. Adjust the CSS custom properties at the top to re-skin for another
+ * store without touching markup.
+ *
  * @var \Ahy\SmartSearchLuma\Block\Plp\Grid $block
  * @var \Magento\Framework\Escaper $escaper
  */
@@ -22,57 +28,76 @@ $nativeSelector = $block->getNativeGridSelector();
     <?= /* @noEscape (sanitised to selector-safe chars in the block) */ $nativeSelector ?> { display: none !important; }
     <?php endif; ?>
 
-    .fs-plp { margin: 0 0 32px; color: #1a1a1a; font-family: inherit; }
+    .fs-plp {
+        --fs-plp-ink: #0d2f47;
+        --fs-plp-ink-soft: #5b6b76;
+        --fs-plp-line: #e3ddcf;
+        --fs-plp-accent: #e63232;
+        --fs-plp-surface: #f4efe4;
+        margin: 0 0 40px;
+        color: var(--fs-plp-ink);
+        font-family: inherit;
+    }
     .fs-plp *, .fs-plp *::before, .fs-plp *::after { box-sizing: border-box; }
     .fs-plp a { color: inherit; text-decoration: none; }
     .fs-plp a:hover .fs-plp-card-title { text-decoration: underline; }
 
-    .fs-plp-toolbar { display: flex; align-items: center; justify-content: space-between;
-        gap: 16px; flex-wrap: wrap; margin: 0 0 16px; padding-bottom: 12px;
-        border-bottom: 1px solid #e6e6e6; }
-    .fs-plp-count { margin: 0; font-size: 14px; color: #555; }
+    .fs-plp-toolbar {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 16px; flex-wrap: wrap; margin: 0 0 20px; padding-bottom: 14px;
+        border-bottom: 1px solid var(--fs-plp-line);
+    }
+    .fs-plp-count { margin: 0; font-size: 14px; font-weight: 600; color: var(--fs-plp-ink-soft); }
     .fs-plp-sort { margin: 0; }
-    .fs-plp-sort select { padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px;
-        background: #fff; font: inherit; }
+    .fs-plp-sort-label { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--fs-plp-ink-soft); }
+    .fs-plp-sort select {
+        padding: 8px 12px; border: 1px solid var(--fs-plp-line); border-radius: 9999px;
+        background: #fff; font: inherit; font-size: 13px; color: var(--fs-plp-ink); cursor: pointer;
+    }
 
-    .fs-plp-grid { list-style: none; margin: 0; padding: 0;
-        display: grid; gap: 24px 16px;
-        grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
+    .fs-plp-grid {
+        list-style: none; margin: 0; padding: 0;
+        display: grid; gap: 28px 20px;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    }
     .fs-plp-card { display: flex; flex-direction: column; }
-    .fs-plp-card-media { display: block; aspect-ratio: 1 / 1; background: #f4f4f4;
-        border-radius: 6px; overflow: hidden; margin-bottom: 10px; }
+    .fs-plp-card-media {
+        display: block; aspect-ratio: 1 / 1; background: var(--fs-plp-surface);
+        border-radius: 10px; overflow: hidden; margin-bottom: 12px;
+    }
     .fs-plp-card-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .fs-plp-card-title { font-size: 14px; line-height: 1.35; margin-bottom: 4px; }
-    .fs-plp-card-brand { margin: 0 0 4px; font-size: 12px; text-transform: uppercase;
-        letter-spacing: .04em; color: #888; }
-    .fs-plp-card-price { margin: 2px 0 0; font-size: 14px; }
-    .fs-plp-card-price--sale .fs-plp-price-now { color: #c0341d; font-weight: 600; }
-    .fs-plp-price-was { margin-left: 6px; color: #999; font-size: 13px; }
-    .fs-plp-card-rating { margin: 4px 0 0; font-size: 12px; color: #666; }
-    .fs-plp-card-stock { margin: 4px 0 0; font-size: 12px; color: #c0341d; }
-    .fs-plp-card-add { margin-top: 8px; padding: 8px 12px; border: 1px solid #1a1a1a;
-        border-radius: 4px; background: #1a1a1a; color: #fff; font: inherit; font-size: 13px;
-        cursor: pointer; align-self: flex-start; }
-    .fs-plp-card-add[disabled] { opacity: .6; cursor: default; }
+    .fs-plp-card-brand {
+        margin: 0 0 4px; font-size: 11px; text-transform: uppercase;
+        letter-spacing: .06em; color: var(--fs-plp-ink-soft);
+    }
+    .fs-plp-card-title { font-size: 14px; font-weight: 600; line-height: 1.35; margin-bottom: 6px; }
+    .fs-plp-card-price { margin: 2px 0 0; font-size: 15px; font-weight: 700; }
+    .fs-plp-card-price--sale .fs-plp-price-now { color: var(--fs-plp-accent); }
+    .fs-plp-price-was { margin-left: 8px; color: var(--fs-plp-ink-soft); font-weight: 400; font-size: 13px; }
+    .fs-plp-card-rating { margin: 6px 0 0; font-size: 12px; color: var(--fs-plp-ink-soft); }
+    .fs-plp-card-stock { margin: 6px 0 0; font-size: 12px; font-weight: 600; color: var(--fs-plp-accent); }
+    .fs-plp-card-add {
+        margin-top: 10px; padding: 9px 20px; border: 0; border-radius: 9999px;
+        background: var(--fs-plp-accent); color: #fff; font: inherit; font-size: 13px;
+        font-weight: 700; cursor: pointer; align-self: flex-start;
+    }
+    .fs-plp-card-add:hover { opacity: .92; }
+    .fs-plp-card-add[disabled] { opacity: .5; cursor: default; }
 
-    .fs-plp-empty { margin: 24px 0; color: #666; }
-    .fs-plp[aria-busy="true"] { transition: opacity .15s ease; }
+    .fs-plp-empty { margin: 32px 0; font-size: 15px; color: var(--fs-plp-ink-soft); }
+    .fs-plp[aria-busy="true"] { opacity: .55; transition: opacity .15s ease; }
     .fs-plp-chrome-host { display: block; }
 
-    .fs-plp-pagination { display: flex; align-items: center; gap: 16px;
-        margin-top: 28px; padding-top: 16px; border-top: 1px solid #e6e6e6;
-        font-size: 14px; }
-    .fs-plp-page { padding: 8px 14px; border: 1px solid #ccc; border-radius: 4px; }
-    .fs-plp-page:hover { border-color: #999; }
-    .fs-plp-page-status { color: #555; }
-
-    @media (prefers-color-scheme: dark) {
-        .fs-plp { color: #ececec; }
-        .fs-plp-toolbar, .fs-plp-pagination { border-color: #333; }
-        .fs-plp-card-media { background: #222; }
-        .fs-plp-sort select { background: #1c1c1c; border-color: #444; color: inherit; }
-        .fs-plp-page { border-color: #444; }
-        .fs-plp-card-add { background: #ececec; color: #111; border-color: #ececec; }
+    .fs-plp-pagination {
+        display: flex; align-items: center; justify-content: center; gap: 16px;
+        margin-top: 36px; padding-top: 20px; border-top: 1px solid var(--fs-plp-line);
+        font-size: 14px;
     }
+    .fs-plp-page {
+        padding: 9px 22px; border: 1px solid var(--fs-plp-ink); border-radius: 9999px;
+        font-weight: 600; color: var(--fs-plp-ink);
+    }
+    .fs-plp-page:hover { background: var(--fs-plp-ink); color: #fff; }
+    .fs-plp-page-status { color: var(--fs-plp-ink-soft); }
 </style>
 <?= /* @noEscape */ $block->getGridHtml() ?>

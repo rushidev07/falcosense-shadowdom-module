@@ -13,4 +13,15 @@
                 sortOrder="100"/>
     </type>
 
+    <!--
+        /catalogsearch/result/?q=... -> 301 -> /fs/search?q=...  (one canonical
+        search URL; avoids the stock controller's eager Elasticsearch load and
+        the layout fatal the route override hits). See CatalogSearchRedirectPlugin.
+    -->
+    <type name="Magento\CatalogSearch\Controller\Result\Index">
+        <plugin name="ahy_smartsearchluma_catalogsearch_redirect"
+                type="Ahy\SmartSearchLuma\Plugin\CatalogSearchRedirectPlugin"
+                sortOrder="10"/>
+    </type>
+
 </config>

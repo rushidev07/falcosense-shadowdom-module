@@ -29,12 +29,19 @@ Also found:
 |---|---|
 | `design/.../header/search-form.phtml` | **Replaced** the 2,008-line file with a minimal Everest-styled input. No Alpine modal, no `FalcoSense\Search` imports. `<form id="search_mini_form" action="{fs/search}" method="get">` — works with JS off; `search-attach.js` owns the type-ahead. Kept the temporary global `<style>` patch for the miscompiled `styles.css` grid columns (move that into real theme CSS later). **Rollback:** `search-form.phtml.ROLLBACK_full_20260813` (in the same folder) — the Aug-13 version (1912 lines), the closest available. The exact pre-edit version was not under git. |
 | `view/frontend/web/js/widget/search-attach.js` | Binds **every** `#search_mini_form input[name="q"]`, not just the first — fixes the hidden-mobile-copy problem on responsive themes. `input` getter now returns the currently-visible copy. |
-| `view/frontend/templates/plp/grid.phtml` | Restyled the SSR grid to the Everest palette (`#0d2f47` ink, `#e63232` accent, `#f4efe4` surface, rounded pills). Still `.fs-plp*`-namespaced + scoped. Dropped the dark-mode block (site is committed light). CSS custom properties at the top for re-skinning. |
-| `view/frontend/web/js/widget/styles.js` | Same Everest re-skin for the overlay / takeover / category-enhancement surfaces. |
+| `Model/Plp/PlpRenderer.php` | **Rebuilt** to reproduce the old production listing layout server-side: persistent **light-DOM** left filter rail (price bands + facet groups with counts + "See More" + active-filter chips) beside the grid, and rich cards (wishlist bookmark, "Sold By …", From/Deal pricing, FREE Shipping, Add/Options). Still `.fs-plp*`-namespaced. |
+| `view/frontend/templates/plp/grid.phtml` | Full scoped CSS for the new two-column layout in the Everest palette (`#0d2f47` ink, `#e63232` accent, `#f4efe4` surface, rounded pills). Mobile: sidebar becomes a right drawer via the "Filters" toggle. |
+| `view/frontend/web/js/widget/plp-hydrate.js` | **Reworked**: binds the light-DOM sidebar (facet checkboxes, price bands, chips, clear-all, collapse, See More, mobile drawer), sort, pagination and per-card Add/Options/wishlist — all driving the `/smsl/plp/grid` fragment loop. **No more shadow-DOM filter panel** — `plp-chrome.js` is now unused (left in place, imported by nothing). Shadow DOM is only the header type-ahead overlay now. |
+| `view/frontend/web/js/widget/styles.js` | Everest re-skin for the header type-ahead overlay surface. |
 | `Plugin/CatalogSearchRedirectPlugin.php` (new) + `etc/frontend/di.xml` | `/catalogsearch/result/?q=...` → **301** → `/fs/search?q=...`. Avoids the stock controller's eager Elasticsearch load **and** the layout fatal — no need to re-enable the route override. Only fires when `q` is set and `frontend_enabled` is on. |
+| `view/frontend/web/js/widget/search-attach.js` | Binds **every** `#search_mini_form input[name="q"]`, not just the first — fixes the hidden-mobile-copy problem on responsive themes. |
 | `view/frontend/layout/catalog_category_view.xml` | Removed the legacy `<move element="div.sidebar.additional" …>` (Luma-only block name; the SSR grid doesn't use it). |
 
-**Sync note:** these module changes live in this `app/code/Ahy/SmartSearchLuma` copy. If the canonical module repo is separate, port the five `Ahy_SmartSearchLuma` files above into it. The theme file is Everest-specific and stays in the theme.
+**Theme fix (TL applies):**
+| `design/.../Magento_Theme/templates/html/header/search-form.phtml` | **Replaced** the 2,008-line file with a minimal Everest-styled input. Rollback: `search-form.phtml.ROLLBACK_full_20260813`. |
+| `design/.../Magento_Catalog/layout/catalog_category_view.xml` | **Delete the line** `<referenceBlock name="category.products" remove="true"/>`. The theme permanently deleting the native grid is why category pages go blank when FalcoSense isn't rendering. `CategoryListPlugin` already suppresses it *conditionally*. |
+
+**Sync note:** all `Ahy_SmartSearchLuma` module changes are now in the canonical repo (`falcosense-shadowdom-module`). The two theme files above are Everest-specific and stay in the theme.
 
 ---
 

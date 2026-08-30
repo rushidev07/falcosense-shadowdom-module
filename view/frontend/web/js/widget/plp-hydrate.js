@@ -1,29 +1,30 @@
 /**
  * Hydration controller for an SSR-rendered listing (category or search).
  *
- * The product grid is already in the light DOM, server-rendered from the one
- * platform response and crawlable. This does NOT rebuild it. It:
- *   1. binds behaviour (quick add-to-cart) onto the existing cards;
- *   2. mounts the filter/sort chrome in a shadow root as a sibling of .fs-plp,
- *      so a grid swap never disturbs it;
- *   3. on any sort/filter/page change, fetches a fresh server-rendered fragment
- *      and swaps <div class="fs-plp"> in place, then re-hydrates it.
+ * The whole listing — product grid AND the left filter rail — is already in the
+ * light DOM, server-rendered by PlpRenderer from the one platform response, and
+ * crawlable. This does NOT rebuild any of it. It:
+ *   1. binds behaviour onto the server-rendered controls (facet checkboxes,
+ *      price bands, chips, "See More", group collapse, sort, pagination, the
+ *      per-card Add/Options + wishlist buttons);
+ *   2. on any sort/filter/page change, fetches a fresh server-rendered fragment
+ *      from /smsl/plp/grid and swaps <div class="fs-plp"> in place, then re-binds.
  *
- * If anything here fails, the page is exactly the server-rendered page — real
- * products, working <a> pagination, a working no-JS sort form. Fail-open.
+ * No shadow DOM here — the filters are a normal persistent sidebar, exactly like
+ * the previous production build. Shadow DOM is only used by the header type-ahead
+ * overlay now.
+ *
+ * If anything here throws, the page is exactly the server-rendered page: real
+ * products, a working no-JS sort form, working <a> pagination, working filter
+ * links would 404 without JS — so the sidebar checkboxes are enhancement only.
+ * Fail-open.
  */
 
 import { fetchFragment, readPlpPayload } from './plp-fragment.js';
-import { mountChrome } from './plp-chrome.js';
 import { addToCart, readFormKey } from './cart.js';
 
-const NEUTRAL_URL_PARAMS = new Set(['p', 'product_list_order', 'product_list_dir', 'price_min', 'price_max']);
+const URL_PARAMS_OWNED = ['p', 'product_list_order', 'price_min', 'price_max'];
 
-/**
- * @param {HTMLElement} rootEl  the <falcosense-root> element (unused hook point)
- * @param {Record<string, any>} config  the bootstrap config blob
- * @returns {{ destroy: () => void } | null}
- */
 export function mountPlpHydration(rootEl, config) {
     let plpEl = document.querySelector('.fs-plp');
     if (!plpEl) {
@@ -40,41 +41,20 @@ export function mountPlpHydration(rootEl, config) {
         searchQuery: payload.searchQuery || null,
         sort: payload.sort || 'position',
         page: (payload.result && payload.result.page) || 1,
-        filters: {},
-        priceMin: null,
-        priceMax: null,
+        filters: payload.filters && typeof payload.filters === 'object' ? { ...payload.filters } : {},
+        priceMin: payload.priceMin ?? null,
+        priceMax: payload.priceMax ?? null,
     };
-
     applyStateFromUrl(state);
 
-    const chromeHost = document.createElement('div');
-    chromeHost.className = 'fs-plp-chrome-host';
-    plpEl.parentNode.insertBefore(chromeHost, plpEl);
-
-    const chrome = mountChrome(chromeHost, {
-        facets: (payload.result.facets) || [],
-        state,
-        accentColor: config.themeAccentColor,
-        onChange: (patch) => {
-            state = { ...state, ...patch };
-            if (patch.page === undefined) {
-                state.page = 1;
-            }
-            reload();
-        },
-    });
-
-    hydrateCards(plpEl);
-    wireGridControls(plpEl);
-
     let busy = false;
+    bind(plpEl);
 
     async function reload() {
         if (busy) {
             return;
         }
         busy = true;
-        plpEl.style.opacity = '0.45';
         plpEl.setAttribute('aria-busy', 'true');
 
         try {
@@ -84,123 +64,125 @@ export function mountPlpHydration(rootEl, config) {
             const fresh = holder.querySelector('.fs-plp');
 
             if (!fresh || fresh.getAttribute('data-fs-source') === 'unavailable') {
-                restore();
+                plpEl.removeAttribute('aria-busy');
+                busy = false;
                 return;
             }
 
             plpEl.replaceWith(fresh);
             plpEl = fresh;
-
-            const freshPayload = readPlpPayload(plpEl);
-            chrome.update(freshPayload && freshPayload.result ? freshPayload.result.facets : null, state);
-
-            hydrateCards(plpEl);
-            wireGridControls(plpEl);
+            bind(plpEl);
             pushStateToUrl(state);
-
             plpEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
         } catch (e) {
-            restore();
+            plpEl.removeAttribute('aria-busy');
         } finally {
             busy = false;
         }
     }
 
-    function restore() {
-        plpEl.style.opacity = '';
-        plpEl.removeAttribute('aria-busy');
-        busy = false;
-    }
-
     /**
-     * Quick add-to-cart on the existing server-rendered cards. Products with
-     * variants link to the PDP instead — swatch resolution is the PDP's job,
-     * not the grid's.
-     * @param {Element} container
+     * Bind every control inside one .fs-plp element. Called on first mount and
+     * after every fragment swap.
+     * @param {Element} el
      */
-    function hydrateCards(container) {
-        const items = {};
-        (payloadFor(container).items || []).forEach((item) => {
-            items[item.product_id] = item;
-        });
+    function bind(el) {
+        el.removeAttribute('aria-busy');
 
-        container.querySelectorAll('.fs-plp-card').forEach((card) => {
-            if (card.dataset.fsHydrated) {
-                return;
-            }
-            card.dataset.fsHydrated = '1';
-
-            const id = parseInt(card.dataset.productId || '0', 10);
-            const item = items[id];
-            if (!item || item.in_stock === false) {
-                return;
-            }
-
-            const hasVariants = Array.isArray(item.swatches) && item.swatches.length > 0;
-            const titleLink = card.querySelector('.fs-plp-card-title');
-
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'fs-plp-card-add';
-            btn.textContent = hasVariants ? 'Choose options' : 'Add to cart';
-
-            btn.addEventListener('click', async () => {
-                if (hasVariants) {
-                    if (titleLink) {
-                        window.location.href = titleLink.href;
-                    }
-                    return;
+        // ── sidebar: facet checkboxes ──
+        el.querySelectorAll('.fs-plp-facet-check').forEach((cb) => {
+            cb.addEventListener('change', () => {
+                const key = cb.dataset.fsFilterKey;
+                const value = cb.dataset.fsFilterValue;
+                const set = new Set(state.filters[key] || []);
+                cb.checked ? set.add(value) : set.delete(value);
+                if (set.size) {
+                    state.filters[key] = [...set];
+                } else {
+                    delete state.filters[key];
                 }
-                btn.disabled = true;
-                const prev = btn.textContent;
-                try {
-                    const result = await addToCart(config.cartAddUrl, {
-                        productId: id,
-                        selectedOptions: {},
-                        formKey: readFormKey(),
-                    });
-                    btn.textContent = result && result.success ? 'Added ✓' : 'Try again';
-                    if (result && result.success) {
-                        window.dispatchEvent(new CustomEvent('fs:cart-updated', { detail: { productId: id } }));
-                    }
-                } catch (e) {
-                    btn.textContent = 'Try again';
-                }
-                setTimeout(() => {
-                    btn.textContent = prev;
-                    btn.disabled = false;
-                }, 2000);
-            });
-
-            card.appendChild(btn);
-        });
-    }
-
-    function payloadFor(container) {
-        const p = readPlpPayload(container);
-        return (p && p.result) || { items: [] };
-    }
-
-    /**
-     * Intercept the server-rendered <a> pagination and the no-JS sort <select>
-     * so they drive the fragment loop instead of a full navigation.
-     * @param {Element} container
-     */
-    function wireGridControls(container) {
-        container.querySelectorAll('.fs-plp-pagination a').forEach((a) => {
-            a.addEventListener('click', (e) => {
-                e.preventDefault();
-                try {
-                    const u = new URL(a.href, window.location.origin);
-                    state.page = parseInt(u.searchParams.get('p') || '1', 10) || 1;
-                } catch (err) {
-                    state.page = state.page + (a.classList.contains('fs-plp-page--next') ? 1 : -1);
-                }
+                state.page = 1;
                 reload();
             });
         });
 
-        const sortForm = container.querySelector('.fs-plp-sort');
+        // ── sidebar: price bands (checkbox that behaves like a radio) ──
+        el.querySelectorAll('.fs-plp-price-check').forEach((cb) => {
+            cb.addEventListener('change', () => {
+                el.querySelectorAll('.fs-plp-price-check').forEach((other) => {
+                    if (other !== cb) {
+                        other.checked = false;
+                    }
+                });
+                if (cb.checked) {
+                    state.priceMin = cb.dataset.fsPriceMin === '' ? null : Number(cb.dataset.fsPriceMin);
+                    state.priceMax = cb.dataset.fsPriceMax === '' ? null : Number(cb.dataset.fsPriceMax);
+                } else {
+                    state.priceMin = null;
+                    state.priceMax = null;
+                }
+                state.page = 1;
+                reload();
+            });
+        });
+
+        // ── sidebar: active-filter chips ──
+        el.querySelectorAll('.fs-plp-chip').forEach((chip) => {
+            chip.addEventListener('click', () => {
+                if (chip.dataset.fsPriceClear) {
+                    state.priceMin = null;
+                    state.priceMax = null;
+                } else {
+                    const key = chip.dataset.fsFilterKey;
+                    const value = chip.dataset.fsFilterValue;
+                    const set = new Set(state.filters[key] || []);
+                    set.delete(value);
+                    set.size ? (state.filters[key] = [...set]) : delete state.filters[key];
+                }
+                state.page = 1;
+                reload();
+            });
+        });
+
+        const clearAll = el.querySelector('.fs-plp-clear-all');
+        if (clearAll) {
+            clearAll.addEventListener('click', () => {
+                state.filters = {};
+                state.priceMin = null;
+                state.priceMax = null;
+                state.page = 1;
+                reload();
+            });
+        }
+
+        // ── sidebar: local UI only (no fetch) ──
+        el.querySelectorAll('.fs-plp-fhead').forEach((head) => {
+            head.addEventListener('click', () => head.closest('.fs-plp-fgroup').classList.toggle('is-collapsed'));
+        });
+        el.querySelectorAll('.fs-plp-more').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const list = btn.closest('.fs-plp-fopts');
+                const hidden = list.querySelectorAll('.fs-plp-fopt-li[hidden]');
+                if (hidden.length) {
+                    hidden.forEach((li) => (li.hidden = false));
+                    btn.textContent = btn.textContent.replace('See More +', 'See Less –');
+                } else {
+                    list.querySelectorAll('.fs-plp-fopt-li').forEach((li, i) => {
+                        if (i >= 5) li.hidden = true;
+                    });
+                    btn.textContent = btn.textContent.replace('See Less –', 'See More +');
+                }
+            });
+        });
+        const toggle = el.querySelector('.fs-plp-filter-toggle');
+        if (toggle) {
+            toggle.addEventListener('click', () => {
+                el.dataset.filtersOpen = el.dataset.filtersOpen === '1' ? '0' : '1';
+            });
+        }
+
+        // ── toolbar: sort ──
+        const sortForm = el.querySelector('.fs-plp-sort');
         if (sortForm) {
             sortForm.addEventListener('submit', (e) => e.preventDefault());
             const sel = sortForm.querySelector('select');
@@ -212,73 +194,104 @@ export function mountPlpHydration(rootEl, config) {
                 });
             }
         }
+
+        // ── pagination ──
+        el.querySelectorAll('.fs-plp-pagination a').forEach((a) => {
+            a.addEventListener('click', (e) => {
+                e.preventDefault();
+                try {
+                    state.page = parseInt(new URL(a.href, location.origin).searchParams.get('p') || '1', 10) || 1;
+                } catch (err) {
+                    state.page += a.classList.contains('fs-plp-page--next') ? 1 : -1;
+                }
+                reload();
+            });
+        });
+
+        // ── cards: add / options / wishlist ──
+        const items = {};
+        (readPlpPayload(el)?.result?.items || []).forEach((i) => (items[i.product_id] = i));
+
+        el.querySelectorAll('.fs-plp-card').forEach((card) => {
+            const id = parseInt(card.dataset.productId || '0', 10);
+            const item = items[id] || {};
+            const addBtn = card.querySelector('.fs-plp-card-add');
+            const titleLink = card.querySelector('.fs-plp-card-title');
+
+            if (addBtn && !addBtn.disabled) {
+                addBtn.addEventListener('click', async () => {
+                    if (card.dataset.type === 'configurable') {
+                        if (titleLink) location.href = titleLink.href;
+                        return;
+                    }
+                    addBtn.disabled = true;
+                    const prev = addBtn.textContent;
+                    try {
+                        const res = await addToCart(config.cartAddUrl, {
+                            productId: id,
+                            selectedOptions: {},
+                            formKey: readFormKey(),
+                        });
+                        addBtn.textContent = res && res.success ? 'Added ✓' : 'Try again';
+                        if (res && res.success) {
+                            window.dispatchEvent(new CustomEvent('fs:cart-updated', { detail: { productId: id } }));
+                        }
+                    } catch (e) {
+                        addBtn.textContent = 'Try again';
+                    }
+                    setTimeout(() => {
+                        addBtn.textContent = prev;
+                        addBtn.disabled = false;
+                    }, 2000);
+                });
+            }
+
+            const wish = card.querySelector('.fs-plp-card-wish');
+            if (wish) {
+                wish.addEventListener('click', () => {
+                    const base = config.wishlistAddUrl || '/wishlist/index/add/';
+                    location.href = base + (base.includes('?') ? '&' : '?') + 'product=' + id;
+                });
+            }
+        });
     }
 
     function applyStateFromUrl(target) {
         try {
-            const params = new URL(window.location.href).searchParams;
+            const params = new URL(location.href).searchParams;
             const p = parseInt(params.get('p') || '1', 10);
-            if (p > 1) {
-                target.page = p;
-            }
+            if (p > 1) target.page = p;
             const sort = params.get('product_list_order');
-            if (sort) {
-                target.sort = sort;
-            }
-            if (params.get('price_min')) {
-                target.priceMin = Number(params.get('price_min'));
-            }
-            if (params.get('price_max')) {
-                target.priceMax = Number(params.get('price_max'));
-            }
+            if (sort) target.sort = sort;
+            if (params.get('price_min')) target.priceMin = Number(params.get('price_min'));
+            if (params.get('price_max')) target.priceMax = Number(params.get('price_max'));
             params.forEach((value, key) => {
                 const m = key.match(/^filter\[([a-zA-Z0-9_]+)\]\[\]$/);
-                if (m) {
-                    (target.filters[m[1]] = target.filters[m[1]] || []).push(value);
-                }
+                if (m) (target.filters[m[1]] = target.filters[m[1]] || []).push(value);
             });
-        } catch (e) {
-            // leave defaults
-        }
+        } catch (e) { /* keep defaults */ }
     }
 
     function pushStateToUrl(s) {
         try {
-            const u = new URL(window.location.href);
+            const u = new URL(location.href);
             [...u.searchParams.keys()].forEach((k) => {
-                if (NEUTRAL_URL_PARAMS.has(k) || /^filter\[/.test(k)) {
-                    u.searchParams.delete(k);
-                }
+                if (URL_PARAMS_OWNED.includes(k) || /^filter\[/.test(k)) u.searchParams.delete(k);
             });
-            if (s.page > 1) {
-                u.searchParams.set('p', String(s.page));
-            }
-            if (s.sort && s.sort !== 'position') {
-                u.searchParams.set('product_list_order', s.sort);
-            }
-            if (s.priceMin != null) {
-                u.searchParams.set('price_min', String(s.priceMin));
-            }
-            if (s.priceMax != null) {
-                u.searchParams.set('price_max', String(s.priceMax));
-            }
+            if (s.page > 1) u.searchParams.set('p', String(s.page));
+            if (s.sort && s.sort !== 'position') u.searchParams.set('product_list_order', s.sort);
+            if (s.priceMin != null) u.searchParams.set('price_min', String(s.priceMin));
+            if (s.priceMax != null) u.searchParams.set('price_max', String(s.priceMax));
             Object.entries(s.filters || {}).forEach(([key, values]) => {
                 values.forEach((v) => u.searchParams.append('filter[' + key + '][]', v));
             });
             history.pushState({ fsPlp: true }, '', u.toString());
-        } catch (e) {
-            // URL sync is a nicety, never fatal
-        }
+        } catch (e) { /* URL sync is a nicety */ }
     }
 
-    // Back/forward within this listing: reload so the server re-renders the
-    // correct SSR view for the restored URL. A path change is a real navigation
-    // — let the browser handle it.
-    const initialPath = window.location.pathname;
+    const initialPath = location.pathname;
     const onPopState = () => {
-        if (window.location.pathname === initialPath) {
-            window.location.reload();
-        }
+        if (location.pathname === initialPath) location.reload();
     };
     window.addEventListener('popstate', onPopState);
 

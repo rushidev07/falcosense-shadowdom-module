@@ -8,6 +8,11 @@
              method="execute">
             <schedule>* * * * *</schedule>
         </job>
+        <job name="ahy_smartsearchluma_plp_warm"
+             instance="Ahy\SmartSearchLuma\Cron\PlpCacheWarmer"
+             method="execute">
+            <schedule>*/5 * * * *</schedule>
+        </job>
     </group>
 
 </config>

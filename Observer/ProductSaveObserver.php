@@ -5,6 +5,8 @@ namespace Ahy\SmartSearchLuma\Observer;
 
 use Ahy\SmartSearchLuma\Helper\Data;
 use Ahy\SmartSearchLuma\Model\AttributeChangeDetector;
+use Ahy\SmartSearchLuma\Model\Plp\AffectedCategoryResolver;
+use Ahy\SmartSearchLuma\Model\Plp\CacheInvalidator;
 use Ahy\SmartSearchLuma\Service\ProductSyncService;
 use Magento\Catalog\Api\ProductRepositoryInterface;
 use Magento\Catalog\Model\ResourceModel\Product\CollectionFactory;
@@ -26,6 +28,8 @@ class ProductSaveObserver implements ObserverInterface
         private readonly LoggerInterface         $logger,
         private readonly ProductRepositoryInterface $productRepository,
         private readonly CollectionFactory       $collectionFactory,
+        private readonly CacheInvalidator        $cacheInvalidator,
+        private readonly AffectedCategoryResolver $affectedCategoryResolver,
     ) {}
 
     public function execute(Observer $observer): void
@@ -55,18 +59,34 @@ class ProductSaveObserver implements ObserverInterface
         }
 
         $this->syncService->sync($product, $storeId);
-        $this->syncParentConfigurable((int) $product->getId(), $storeId);
+        $syncedIds = array_merge(
+            [(int) $product->getId()],
+            $this->syncParentConfigurable((int) $product->getId(), $storeId)
+        );
+
+        // Purge the affected listing caches — but only now, after the sync above
+        // has pushed the change to the platform. Purging any earlier would just
+        // let the next render re-cache the old data for a full TTL.
+        if ($this->helper->isPlpSsrEnabled($storeId)) {
+            $this->cacheInvalidator->invalidate(
+                $this->affectedCategoryResolver->tagsForProducts($syncedIds)
+            );
+        }
     }
 
-    private function syncParentConfigurable(int $childId, int $storeId): void
+    /**
+     * @return int[] parent product ids that were synced
+     */
+    private function syncParentConfigurable(int $childId, int $storeId): array
     {
+        $parentIds = [];
         try {
             $parents = $this->collectionFactory->create();
             $parents->addAttributeToSelect('*');
             $parents->joinField('child_id', 'catalog_product_relation', 'child_id', 'parent_id=entity_id', ['child_id' => $childId]);
 
             if ($parents->getSize() === 0) {
-                return;
+                return [];
             }
 
             foreach ($parents as $parent) {
@@ -74,10 +94,13 @@ class ProductSaveObserver implements ObserverInterface
                     continue;
                 }
                 $this->syncService->sync($parent, $storeId);
+                $parentIds[] = (int) $parent->getId();
             }
         } catch (\Throwable $e) {
             $this->logger->warning('[SmartSearchLuma][RT] Could not sync parent for child ' . $childId . ': ' . $e->getMessage());
         }
+
+        return $parentIds;
     }
 
     private function isWithinRateLimit(int $storeId): bool

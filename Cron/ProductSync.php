@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace Ahy\SmartSearchLuma\Cron;
 
 use Ahy\SmartSearchLuma\Helper\Data;
+use Ahy\SmartSearchLuma\Model\Plp\AffectedCategoryResolver;
+use Ahy\SmartSearchLuma\Model\Plp\CacheInvalidator;
 use Ahy\SmartSearchLuma\Service\ProductSyncService;
 use Ahy\SmartSearchLuma\Service\SyncLockManager;
 use Magento\Catalog\Model\ResourceModel\Product\CollectionFactory;
@@ -13,12 +15,17 @@ class ProductSync
 {
     private const BATCH_SIZE = 500;
 
+    /** Beyond this many changed products, purge the whole listing cache instead of per-category. */
+    private const BULK_INVALIDATION_THRESHOLD = 2000;
+
     public function __construct(
         private readonly Data               $helper,
         private readonly ProductSyncService $syncService,
         private readonly CollectionFactory  $collectionFactory,
         private readonly LoggerInterface    $logger,
         private readonly SyncLockManager    $lockManager,
+        private readonly CacheInvalidator   $cacheInvalidator,
+        private readonly AffectedCategoryResolver $affectedCategoryResolver,
     ) {}
 
     public function execute(): void
@@ -51,6 +58,7 @@ class ProductSync
         $page        = 1;
         $totalSynced = 0;
         $aborted     = false;
+        $changedIds  = [];
 
         try {
             do {
@@ -75,6 +83,12 @@ class ProductSync
                     return;
                 }
 
+                if (count($changedIds) < self::BULK_INVALIDATION_THRESHOLD) {
+                    foreach ($products as $p) {
+                        $changedIds[] = (int) $p->getId();
+                    }
+                }
+
                 $totalSynced += max(0, $count);
                 $page++;
             } while (count($products) === self::BATCH_SIZE);
@@ -86,12 +100,38 @@ class ProductSync
                     $this->helper->clearFullSyncFlag();
                 }
 
+                $this->invalidateListingCaches($forceFullSync, $changedIds);
+
                 $this->lockManager->writeResult(true, "Synced {$totalSynced} products.");
                 $this->logger->info('[SmartSearchLuma][Cron] Done. synced=' . $totalSynced . ' cursor=' . $syncStartedAt);
             }
 
         } finally {
             $this->lockManager->release();
+        }
+    }
+
+    /**
+     * One purge at the end of the run — never per batch — so a large delta or a
+     * full sync coalesces into a single invalidation instead of a PURGE storm.
+     *
+     * @param int[] $changedIds
+     */
+    private function invalidateListingCaches(bool $forceFullSync, array $changedIds): void
+    {
+        if (!$this->helper->isPlpSsrEnabled()) {
+            return;
+        }
+
+        if ($forceFullSync || count($changedIds) >= self::BULK_INVALIDATION_THRESHOLD) {
+            $this->cacheInvalidator->invalidateAll();
+            return;
+        }
+
+        if ($changedIds !== []) {
+            $this->cacheInvalidator->invalidate(
+                $this->affectedCategoryResolver->tagsForProducts($changedIds)
+            );
         }
     }
 

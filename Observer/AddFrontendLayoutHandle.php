@@ -19,7 +19,12 @@ class AddFrontendLayoutHandle implements ObserverInterface
         // it activates, ahy_smartsearch_active.xml) is retired entirely once Phase 2
         // completes; this check is what makes that retirement safe to land
         // incrementally rather than as one atomic cutover.
-        if (!$this->helper->isFrontendEnabled() || $this->helper->isWidgetEnabled()) {
+        // The destructive handle (Luma-specific block removals) is only for the
+        // oldest path. The Shadow DOM widget and the SSR grid both suppress the
+        // native content themselves, at runtime, without theme-name coupling.
+        if (!$this->helper->isFrontendEnabled()
+            || $this->helper->isWidgetEnabled()
+            || $this->helper->isPlpSsrEnabled()) {
             return;
         }
 

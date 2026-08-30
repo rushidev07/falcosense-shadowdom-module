@@ -4,7 +4,10 @@
     <module name="Ahy_SmartSearchLuma" setup_version="1.0.0">
         <sequence>
             <module name="Magento_MessageQueue"/>
+            <module name="Magento_Catalog"/>
             <module name="Magento_CatalogInventory"/>
+            <module name="Magento_CatalogSearch"/>
+            <module name="Magento_PageCache"/>
         </sequence>
     </module>
 </config>

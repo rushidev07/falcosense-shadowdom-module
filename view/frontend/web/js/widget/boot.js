@@ -2,6 +2,7 @@ import { readConfig } from './shadow-root.js';
 import { attachToNativeSearch } from './search-attach.js';
 import { mountTakeover } from './takeover.js';
 import { mountCategoryEnhancement } from './category-enhancement.js';
+import { mountPlpHydration } from './plp-hydrate.js';
 import { addToCart, readFormKey } from './cart.js';
 
 /**
@@ -49,6 +50,19 @@ class FalcoSenseRoot extends HTMLElement {
         // (category-enhancement.js) — see Helper\Data::isCategoryEnhancementEnabled.
         // Header search (attachToNativeSearch, above) runs on every page type
         // regardless of either branch below.
+        // Preferred path: the server already rendered the real, single-source
+        // grid (Block\Plp\Grid) into the light DOM. Hydrate it in place — never
+        // rebuild it, never re-fetch it for the first view. The legacy
+        // takeover/enhancement paths below are only for stores not yet on the
+        // SSR/ISR pipeline.
+        const hasSsrGrid = !!document.querySelector('.fs-plp .fs-plp-payload');
+        if (hasSsrGrid && (config.pageType === 'category' || config.pageType === 'search')) {
+            this._plpHandle = mountPlpHydration(this, config);
+            if (this._plpHandle) {
+                return;
+            }
+        }
+
         if (config.pageType === 'search') {
             this._takeoverHandle = mountTakeover(this, {
                 productsApiUrl: config.productsApiUrl,
@@ -81,6 +95,9 @@ class FalcoSenseRoot extends HTMLElement {
         }
         if (this._outsideClickHandler) {
             document.removeEventListener('click', this._outsideClickHandler);
+        }
+        if (this._plpHandle && typeof this._plpHandle.destroy === 'function') {
+            this._plpHandle.destroy();
         }
         this._booted = false;
     }

@@ -17,6 +17,14 @@
                        as="ahy_options_template"
                        template="Ahy_SmartSearchLuma::category/product_options.phtml"/>
             </block>
+
+            <!-- Single-source SSR grid for the search-results page. Same block,
+                 same template, same fail-open behaviour as the category page. -->
+            <block class="Ahy\SmartSearchLuma\Block\Plp\Grid"
+                   name="ahy_plp_ssr_grid_search"
+                   template="Ahy_SmartSearchLuma::plp/grid.phtml"
+                   ifconfig="smart_search/plp/ssr_enabled"
+                   before="-"/>
         </referenceContainer>
     </body>
 </page>

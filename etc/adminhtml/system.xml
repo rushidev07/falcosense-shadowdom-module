@@ -113,11 +113,85 @@
                     <comment>e.g. http://host.docker.internal:8001/api/search.php</comment>
                 </field>
 
+                <field id="platform_store_id" translate="label" type="text"
+                       sortOrder="36" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Platform Store / Tenant ID</label>
+                    <comment>The platform-side store id this Magento store view maps to. Set this per store view. Leave 0 to fall back to a position-derived id, which can shift if store views are added or removed.</comment>
+                    <validate>validate-number validate-digits</validate>
+                </field>
+
                 <field id="products_per_page" translate="label" type="text"
                        sortOrder="40" showInDefault="1" showInWebsite="1" showInStore="1">
                     <label>Products Per Page</label>
                     <comment>Number of products shown per page on category and search results. Use a multiple of 6 (e.g. 12, 18, 24) to avoid orphaned products in the grid.</comment>
                     <validate>validate-number validate-digits validate-greater-than-zero</validate>
+                </field>
+
+            </group>
+
+            <group id="plp" translate="label" sortOrder="16"
+                   showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>Category &amp; Search SSR (ISR)</label>
+                <comment>Server-renders category and search listings from the platform (one source, no DB/index drift), cached and refreshed ISR-style. Requires "Enable Frontend UI".</comment>
+
+                <field id="ssr_enabled" translate="label" type="select"
+                       sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Enable Platform SSR for Listings</label>
+                    <comment>When on, category/search pages render their product grid + JSON-LD server-side from the platform's own response. When off, or when the platform has no data, the native Magento grid renders unchanged.</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <depends>
+                        <field id="frontend_enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="cache_ttl" translate="label" type="text"
+                       sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Snapshot TTL (seconds)</label>
+                    <comment>How long a cached platform response is served before the next render refreshes it. Event-driven purge on product change happens regardless of this value. 300-900 is the sane range.</comment>
+                    <validate>validate-number validate-digits validate-greater-than-zero</validate>
+                    <depends>
+                        <field id="ssr_enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="platform_timeout_ms" translate="label" type="text"
+                       sortOrder="30" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Platform Render Timeout (ms)</label>
+                    <comment>Hard budget for the server-side platform call during page render. Exceeded = abandon and serve the last-known-good snapshot, then the native grid. Keep low (300-800).</comment>
+                    <validate>validate-number validate-digits validate-greater-than-zero</validate>
+                    <depends>
+                        <field id="ssr_enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="fallback_min_ratio" translate="label" type="text"
+                       sortOrder="40" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Minimum Sync Coverage Ratio</label>
+                    <comment>Safety guard for partially-synced catalogs: if the platform returns fewer than this fraction of a category's product count (e.g. 0.5), render the native grid instead. 0 disables the guard.</comment>
+                    <validate>validate-number</validate>
+                    <depends>
+                        <field id="ssr_enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="warm_enabled" translate="label" type="select"
+                       sortOrder="50" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Pre-warm Popular Categories</label>
+                    <comment>A cron pre-fetches the top categories' snapshots every few minutes so even the first visitor after a TTL expiry gets an instant cache hit. Adds a small steady load on the platform.</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <depends>
+                        <field id="ssr_enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="warm_limit" translate="label" type="text"
+                       sortOrder="60" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Categories to Pre-warm</label>
+                    <comment>How many of the most prominent in-menu categories to keep warm per store view (max 500).</comment>
+                    <validate>validate-number validate-digits validate-greater-than-zero</validate>
+                    <depends>
+                        <field id="warm_enabled">1</field>
+                    </depends>
                 </field>
 
             </group>

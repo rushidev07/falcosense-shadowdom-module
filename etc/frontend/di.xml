@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+
+    <!--
+        Empties the native PLP product collection when the single-source SSR grid
+        is taking over the page. Frontend-area only. Fail-open: no-op unless
+        Block\Plp\Grid actually has usable platform data for this request.
+    -->
+    <type name="Magento\Catalog\Block\Product\ListProduct">
+        <plugin name="ahy_smartsearchluma_plp_collection"
+                type="Ahy\SmartSearchLuma\Plugin\CategoryListPlugin"
+                sortOrder="100"/>
+    </type>
+
+</config>

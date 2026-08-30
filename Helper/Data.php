@@ -20,10 +20,18 @@ class Data extends AbstractHelper
     private const XML_PATH_THEME_ACCENT_COLOR = 'smart_search/general/theme_accent_color';
     private const XML_PATH_ENABLED          = 'smart_search/general/enabled';
     private const XML_PATH_REALTIME_ENABLED = 'smart_search/general/realtime_sync_enabled';
+
+    private const XML_PATH_PLP_SSR_ENABLED   = 'smart_search/plp/ssr_enabled';
+    private const XML_PATH_PLP_CACHE_TTL     = 'smart_search/plp/cache_ttl';
+    private const XML_PATH_PLP_TIMEOUT_MS    = 'smart_search/plp/platform_timeout_ms';
+    private const XML_PATH_PLP_FALLBACK_RATIO = 'smart_search/plp/fallback_min_ratio';
+    private const XML_PATH_PLP_WARM_ENABLED   = 'smart_search/plp/warm_enabled';
+    private const XML_PATH_PLP_WARM_LIMIT     = 'smart_search/plp/warm_limit';
     private const XML_PATH_ENDPOINT_URL     = 'smart_search/general/endpoint_url';
     private const XML_PATH_SEARCH_URL       = 'smart_search/general/search_url';
     private const XML_PATH_PRODUCTS_PER_PAGE = 'smart_search/general/products_per_page';
     private const XML_PATH_API_KEY          = 'smart_search/general/api_key';
+    private const XML_PATH_PLATFORM_STORE_ID = 'smart_search/general/platform_store_id';
     private const XML_PATH_LAST_SYNC_AT     = 'smart_search/cron/last_sync_at';
 
     private const XML_PATH_NR_ENABLED         = 'smart_search/no_results_modal/enabled';
@@ -134,6 +142,69 @@ class Data extends AbstractHelper
         return $this->config->isSetFlag(self::XML_PATH_REALTIME_ENABLED, ScopeInterface::SCOPE_STORE, $storeId);
     }
 
+    /**
+     * Master switch for server-side rendering of category/search listings from
+     * the platform (the single-source + ISR path). Gated only on the frontend
+     * being enabled — deliberately independent of widget_enabled, so the
+     * crawlable server render can be turned on before the Shadow DOM hydration
+     * layer is rolled out on a given store.
+     */
+    public function isPlpSsrEnabled(int|string|null $storeId = null): bool
+    {
+        return $this->isFrontendEnabled($storeId)
+            && $this->config->isSetFlag(self::XML_PATH_PLP_SSR_ENABLED, ScopeInterface::SCOPE_STORE, $storeId);
+    }
+
+    /**
+     * Blanket TTL (seconds) for a cached platform PLP response. This is the
+     * safety-net freshness bound; event-driven purge (Phase B) handles the
+     * changes that actually matter. 5-15 min is the sane range.
+     */
+    public function getPlpCacheTtl(int|string|null $storeId = null): int
+    {
+        $val = (int) $this->config->getValue(self::XML_PATH_PLP_CACHE_TTL, ScopeInterface::SCOPE_STORE, $storeId);
+        return $val > 0 ? $val : 600;
+    }
+
+    /**
+     * Hard budget (ms) for the server-side platform call on the render path.
+     * Exceed it and the request is abandoned in favour of the last-known-good
+     * blob, then the native grid — a slow platform must never slow the page.
+     */
+    public function getPlpPlatformTimeoutMs(int|string|null $storeId = null): int
+    {
+        $val = (int) $this->config->getValue(self::XML_PATH_PLP_TIMEOUT_MS, ScopeInterface::SCOPE_STORE, $storeId);
+        return $val > 0 ? $val : 500;
+    }
+
+    /**
+     * C1 coverage guard. If the platform returns fewer than (this ratio x the
+     * category's native product count), assume the catalog isn't fully synced
+     * and let the native grid render instead. 0 disables the guard (default).
+     */
+    public function getPlpFallbackMinRatio(int|string|null $storeId = null): float
+    {
+        $val = (float) $this->config->getValue(self::XML_PATH_PLP_FALLBACK_RATIO, ScopeInterface::SCOPE_STORE, $storeId);
+        return $val > 0 ? min($val, 1.0) : 0.0;
+    }
+
+    /**
+     * When on, a cron pre-fetches the top categories' snapshots so even the
+     * first visitor after a TTL expiry gets an instant cache hit instead of
+     * waiting on a live platform call.
+     */
+    public function isPlpWarmEnabled(int|string|null $storeId = null): bool
+    {
+        return $this->isPlpSsrEnabled($storeId)
+            && $this->config->isSetFlag(self::XML_PATH_PLP_WARM_ENABLED, ScopeInterface::SCOPE_STORE, $storeId);
+    }
+
+    public function getPlpWarmLimit(int|string|null $storeId = null): int
+    {
+        $val = (int) $this->config->getValue(self::XML_PATH_PLP_WARM_LIMIT, ScopeInterface::SCOPE_STORE, $storeId);
+        return $val > 0 ? min($val, 500) : 50;
+    }
+
     public function getEndpointUrl(int|string|null $storeId = null): string
     {
         return (string) $this->config->getValue(self::XML_PATH_ENDPOINT_URL, ScopeInterface::SCOPE_STORE, $storeId);
@@ -169,17 +240,34 @@ class Data extends AbstractHelper
         return (string) $this->config->getValue(self::XML_PATH_API_KEY, ScopeInterface::SCOPE_STORE, $storeId);
     }
 
+    /**
+     * Magento store view -> platform tenant/store id.
+     *
+     * An explicit, stored mapping (per store view) wins — set it and the id is
+     * stable regardless of how many store views exist. Only when nothing is
+     * configured does it fall back to the legacy position-derived id, which
+     * shifts if store views are added or removed (see fundamentals guide §11);
+     * the config field exists specifically to retire that fragility.
+     */
     public function getPlatformStoreId(int|string|null $storeId = null): int
     {
-        $stores = $this->storeManager->getStores(false);
-        $storeIds = array_keys($stores);
-        sort($storeIds);
-
         if ($storeId === null) {
             $storeId = (int) $this->storeManager->getStore()->getId();
         }
 
-        $position = array_search((int) $storeId, $storeIds);
+        $explicit = (int) $this->config->getValue(
+            self::XML_PATH_PLATFORM_STORE_ID,
+            ScopeInterface::SCOPE_STORE,
+            $storeId
+        );
+        if ($explicit > 0) {
+            return $explicit;
+        }
+
+        $storeIds = array_keys($this->storeManager->getStores(false));
+        sort($storeIds);
+        $position = array_search((int) $storeId, $storeIds, true);
+
         return $position !== false ? (int) $position + 1 : 1;
     }
 

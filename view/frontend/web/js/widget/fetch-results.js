@@ -28,7 +28,9 @@ export async function fetchProducts(productsApiUrl, base, extraParams = {}) {
     const response = await fetch(url.toString(), { credentials: 'omit' });
 
     if (!response.ok) {
-        throw new Error(`Search request failed (HTTP ${response.status})`);
+        const err = new Error(`Search request failed (HTTP ${response.status})`);
+        err.status = response.status;
+        throw err;
     }
 
     const data = await response.json();

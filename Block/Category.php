@@ -35,7 +35,11 @@ class Category extends Template
      */
     public function isEnabled(): bool
     {
-        return $this->helper->isFrontendEnabled() && !$this->helper->isWidgetEnabled();
+        // The new single-source SSR grid (Block\Plp\Grid) supersedes this legacy
+        // template outright — never let both render into `content`.
+        return $this->helper->isFrontendEnabled()
+            && !$this->helper->isWidgetEnabled()
+            && !$this->helper->isPlpSsrEnabled();
     }
 
     public function getProductsApiUrl(): string

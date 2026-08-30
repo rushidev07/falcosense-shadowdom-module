@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Cache/etc/cache.xsd">
+    <type name="ahy_smartsearch_plp"
+          translate="label,description"
+          instance="Ahy\SmartSearchLuma\Model\Cache\Type\Plp">
+        <label>FalcoSense PLP Snapshots</label>
+        <description>Cached platform responses used to server-render category and search pages, plus the last-known-good fallback served when the platform is unreachable.</description>
+    </type>
+</config>

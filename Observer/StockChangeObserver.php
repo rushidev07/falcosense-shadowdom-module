@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace Ahy\SmartSearchLuma\Observer;
 
 use Ahy\SmartSearchLuma\Helper\Data;
+use Ahy\SmartSearchLuma\Model\Plp\AffectedCategoryResolver;
+use Ahy\SmartSearchLuma\Model\Plp\CacheInvalidator;
 use Ahy\SmartSearchLuma\Service\ProductSyncService;
 use Magento\Catalog\Api\ProductRepositoryInterface;
 use Magento\Catalog\Model\ResourceModel\Product\CollectionFactory;
@@ -19,6 +21,8 @@ class StockChangeObserver implements ObserverInterface
         private readonly ProductRepositoryInterface $productRepository,
         private readonly CollectionFactory         $collectionFactory,
         private readonly LoggerInterface           $logger,
+        private readonly CacheInvalidator          $cacheInvalidator,
+        private readonly AffectedCategoryResolver  $affectedCategoryResolver,
     ) {}
 
     public function execute(Observer $observer): void
@@ -48,14 +52,24 @@ class StockChangeObserver implements ObserverInterface
         try {
             $product = $this->productRepository->getById($productId, false, null, true);
             $this->syncService->sync($product, 0, $stockItem);
-            $this->syncParentConfigurable($productId);
+            $syncedIds = array_merge([$productId], $this->syncParentConfigurable($productId));
+
+            if ($this->helper->isPlpSsrEnabled()) {
+                $this->cacheInvalidator->invalidate(
+                    $this->affectedCategoryResolver->tagsForProducts($syncedIds)
+                );
+            }
         } catch (\Throwable $e) {
             $this->logger->error('[SmartSearchLuma] StockChangeObserver failed for product ' . $productId . ': ' . $e->getMessage());
         }
     }
 
-    private function syncParentConfigurable(int $childId): void
+    /**
+     * @return int[] parent product ids that were synced
+     */
+    private function syncParentConfigurable(int $childId): array
     {
+        $parentIds = [];
         try {
             $parents = $this->collectionFactory->create();
             $parents->addAttributeToSelect('*');
@@ -66,9 +80,12 @@ class StockChangeObserver implements ObserverInterface
                     continue;
                 }
                 $this->syncService->sync($parent, 0);
+                $parentIds[] = (int) $parent->getId();
             }
         } catch (\Throwable $e) {
             $this->logger->warning('[SmartSearchLuma][RT] Could not sync parent for child ' . $childId . ': ' . $e->getMessage());
         }
+
+        return $parentIds;
     }
 }

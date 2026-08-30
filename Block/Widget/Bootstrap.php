@@ -104,6 +104,8 @@ class Bootstrap extends Template
             'productsApiUrl' => $this->buildPlatformUrl('/api/v1/products'),
             'suggestUrl' => $this->buildPlatformUrl('/api/v1/suggest'),
             'cartAddUrl' => $this->getUrl('smsl/cart/add'),
+            'plpGridUrl' => $this->getUrl('smsl/plp/grid'),
+            'tokenRefreshUrl' => $this->getUrl('smsl/search/token'),
             'mediaBaseUrl' => $this->getMediaBaseUrl(),
             'searchToken' => $this->tokenService->getToken(0),
             'perPage' => $this->helper->getProductsPerPage(),

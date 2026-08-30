@@ -1,5 +1,6 @@
 import { getOrCreateShadowRoot } from './shadow-root.js';
 import { fetchProducts } from './fetch-results.js';
+import { refreshSearchToken } from './token.js';
 import { renderProductGrid, renderLoadingState, renderErrorState, attachAddToCartHandler } from './product-grid.js';
 import {
     createInitialFilterState,
@@ -121,7 +122,7 @@ export function mountTakeover(hostEl, config) {
         load();
     }
 
-    async function load({ silent = false } = {}) {
+    async function load({ silent = false, retried = false } = {}) {
         if (!silent) {
             renderLoadingState(shell);
         }
@@ -135,6 +136,15 @@ export function mountTakeover(hostEl, config) {
             const data = await fetchProducts(config.productsApiUrl, base, buildApiParams(filterState));
             renderProductGrid(shell, data, config, filterState, handleStateChange);
         } catch (err) {
+            // The baked token expired while the page sat in FPC — get a fresh one
+            // once and retry before showing an error.
+            if (!retried && (err && (err.status === 401 || err.status === 403)) && config.tokenRefreshUrl) {
+                const fresh = await refreshSearchToken(config.tokenRefreshUrl);
+                if (fresh) {
+                    config.searchToken = fresh;
+                    return load({ silent, retried: true });
+                }
+            }
             renderErrorState(shell);
             // Deliberately no "try native search instead" link here — that would
             // be exactly the fallback the implementation plan rules out.

@@ -51,17 +51,14 @@
                 type="Ahy\SmartSearchLuma\Model\Cart\NativeVariantResolver"/>
 
     <!--
-        PLP data Port. The default binding is the caching decorator; its
-        `upstream` is the real platform adapter. A client whose platform speaks
-        a different protocol overrides only `upstream` (or the whole preference)
-        in their own module — the ISR/fallback/render layers never change.
+        PLP data Port. TEMPORARILY bound directly to the platform adapter,
+        bypassing the CachedPlpProvider decorator (ISR cache + last-known-good
+        fallback) to test the module's behavior with every render hitting the
+        platform live. Revert to CachedPlpProvider (see git history) once
+        that experiment is done — without it, a platform outage falls straight
+        through to the native Magento grid with no stale-data fallback.
     -->
     <preference for="Ahy\SmartSearchLuma\Api\PlpDataProviderInterface"
-                type="Ahy\SmartSearchLuma\Service\Plp\CachedPlpProvider"/>
-    <type name="Ahy\SmartSearchLuma\Service\Plp\CachedPlpProvider">
-        <arguments>
-            <argument name="upstream" xsi:type="object">Ahy\SmartSearchLuma\Service\Plp\OpenSearchPlpProvider</argument>
-        </arguments>
-    </type>
+                type="Ahy\SmartSearchLuma\Service\Plp\OpenSearchPlpProvider"/>
 
 </config>
